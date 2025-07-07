@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "Tab Manager",
+    "description": "Manage tabs and resources across workspaces",
+    "version": "1.0",
+    "permissions": [
+        "tabs",
+        "storage"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_title": "Open Tab Manager",
+        "default_popup": "app/index.html"
+    },
+    "icons": {
+        "128": "icons/icon.png"
+    }
+}

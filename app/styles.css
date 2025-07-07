@@ -1,0 +1,211 @@
+@import url("https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css");
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+
+/* reset */
+* {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  transition: all 0.3s ease-in-out;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+
+ul {
+    list-style: none;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+/* layout */
+
+body {
+    display: flex;
+  margin: 0;
+  font-family: sans-serif;
+  height: 100vh;
+}
+
+#sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 250px;
+    background-color: #2c315b;
+    border-right: 1px solid #ccc;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+#main {
+    display: flex;
+    flex-direction: column;
+
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* style */
+#sidebar {
+    & h1 {
+        font-size: 2rem;
+        color: #fff;
+        margin-bottom: 20px;
+        text-align: center;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        background-image: linear-gradient(30deg, #7b9aff, #e1e6ff);
+        padding: 10px;
+    }
+
+  & #addWorkspaceBtn {
+        background-color: #fff;
+        color: black;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        cursor: pointer;
+        margin: 20px 0 20px;
+
+        &:hover {
+            scale: 1.05;
+        }
+  }
+
+    & ul {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border-radius: 10px;
+    }
+
+    & li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background-color: #e3eaff;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        text-transform: capitalize;
+
+        &:hover {
+            background-color: #d0d6f2;
+        }
+    }
+
+    & button {
+        background: none;
+        border: none;
+    }
+}
+
+#main {
+    & h2 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        text-transform: capitalize;
+        background: radial-gradient(circle at top left, #657bc0, #7e60b7);
+        width: fit-content;
+        padding: 0.5rem 1.5rem;
+        border-radius: 100px;
+        color: #fff;
+    }
+
+    & h3 {
+        font-size: 18px;
+        color: #2c315b;
+        margin-bottom: 10px;
+        margin-top: 20px;
+    }
+
+    & #tabList {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    & ul {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 1rem;
+        /* border: 1px solid #ccc; */
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+
+    & li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        outline: 2px solid transparent;
+
+        &:hover {
+            outline: 2px solid #7b9aff;
+        }
+
+        & button:hover {
+            outline: 2px solid #7b9aff;
+        }
+    }
+
+    .opened li {
+        background-color: #d5e7ff;
+    }
+
+    .res li {
+        background-color: #e0e0e0;
+    }
+
+    & button {
+        background-color: #fff;
+        color: black;
+        border: none;
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        outline: 2px solid transparent;
+    }
+
+    & #addWorkspaceBtn {
+        margin-bottom: 20px;
+    }
+
+    & #addResourceCategory {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 20px;
+    }
+}
+
+.links {
+    display: flex;
+    align-items: flex-start;
+    gap: 50px;
+
+    & .opened, & .res {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex-grow: 1;
+    }
+}
+
+#addResourceCategory {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    width: fit-content;
+    align-self: center;
+    padding: 1rem;
+}

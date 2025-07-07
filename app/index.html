@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tab Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="sidebar">
+    <h1>Tab Manager</h1>
+    <button id="addWorkspaceBtn">New Workspace</button>
+    <ul id="workspaceList"></ul>
+  </div>
+  <div id="main">
+    <h2 id="workspaceTitle">Select a workspace</h2>
+    <div class="links">
+        <div class="opened">
+            <h3>Open Tabs</h3>
+            <ul id="tabList"></ul>
+        </div>
+        <div class="res">
+            <h3>Resources</h3>
+            <ul id="resourceList"></ul>
+            <button id="addResourceCategory">New Category</button>
+        </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
