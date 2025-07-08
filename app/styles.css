@@ -23,16 +23,25 @@ a {
 
 /* layout */
 
-.background {
-  position: fixed;
+.gradient,
+.noise {
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  filter: blur(5px);
+  object-fit: cover;
   pointer-events: none;
+}
 
+.gradient {
+  z-index: -2;
+  filter: brightness(0.5);
+}
+
+.noise {
   z-index: -1;
+  opacity: 0.1;
 }
 
 body {
@@ -40,7 +49,7 @@ body {
   margin: 0;
   font-family: sans-serif;
   height: 100vh;
-  background-color: black;
+  background: linear-gradient(140deg, #000418, #151e3b, #000c21);
 }
 
 #sidebar {
@@ -69,9 +78,15 @@ body {
   justify-content: center;
   gap: 10px;
   padding: 10px;
-  margin-bottom: 20px;
-  color: #fff;
+  margin-bottom: 10px;
   font-size: 15px;
+  font-weight: bold;
+  background: radial-gradient(circle at top left, #5e86ff 20%, #69fffd);
+  padding: 0.8rem 1.5rem;
+  border-radius: 5px;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 
   & i {
     font-size: 30px;
@@ -80,17 +95,18 @@ body {
 
 #sidebar {
   & #addWorkspaceBtn {
-    background-color: #fff;
-    color: black;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 5px;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    background: rgba(255, 255, 255, 1);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 100px;
+    margin-top: 20px;
     cursor: pointer;
     margin: 20px 0 20px;
 
     &:hover {
-      scale: 1.05;
+      color: #fff;
+      background: #3e57fc;
     }
   }
 
@@ -106,8 +122,8 @@ body {
     align-items: center;
     gap: 10px;
     padding: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    outline: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0);
+    outline: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     color: #fff;
     font-size: 14px;
@@ -131,15 +147,17 @@ body {
 
 #main {
   & h2 {
-    font-size: 1.5rem;
+    font-size: 25px;
+    padding: 0.8rem 1.5rem;
     margin-bottom: 20px;
     text-transform: capitalize;
-    background: radial-gradient(circle at top left, #3e57fc, #909eff);
-    width: fit-content;
-    padding: 0.5rem 1.5rem;
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.3);
+    outline: 1px solid rgba(255, 255, 255, 0.5);
+    padding: 15px 50px;
+    border-radius: 100px;
     color: #fff;
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    width: fit-content;
   }
 
   & h3 {
@@ -161,7 +179,7 @@ body {
     flex-direction: column;
     gap: 10px;
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.1);
+    /* background: rgba(255, 255, 255, 0.1); */
     outline: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 10px;
   }
@@ -175,30 +193,31 @@ body {
     cursor: pointer;
     outline: 2px solid transparent;
     backdrop-filter: blur(10px);
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
     color: #fff;
     font-size: 14px;
 
     &:hover {
-      outline: 1px solid #fff;
+      outline: 2px solid #3e57fc;
     }
 
     & button:hover {
-      outline: 1px solid #fff;
+      background: #3e57fc;
     }
   }
 
   .opened li {
-    background: rgba(255, 255, 255, 0.3);
-    outline: 1px solid rgba(255, 255, 255, 0.5);
-  }
-
-  .res li {
     background: rgba(255, 255, 255, 0.1);
     outline: 1px solid rgba(255, 255, 255, 0.3);
   }
 
+  .res li {
+    background: rgba(255, 255, 255, 0);
+    outline: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
   & button {
-    background-color: #fff;
+    background: rgba(255, 255, 255, 0.3);
     color: black;
     border: none;
     padding: 10px;
@@ -207,15 +226,21 @@ body {
     outline: 2px solid transparent;
   }
 
-  & #addWorkspaceBtn {
-    margin-bottom: 20px;
-  }
-
   & #addResourceCategory {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-self: center;
+    width: fit-content;
+    background: rgba(255, 255, 255, 1);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 100px;
     margin-top: 20px;
+    cursor: pointer;
+
+    &:hover {
+      color: #fff;
+      background: #3e57fc;
+    }
   }
 }
 
@@ -229,8 +254,4 @@ body {
     flex-direction: column;
     width: 50%;
   }
-}
-
-#addResourceCategory {
-  align-self: flex-start;
 }

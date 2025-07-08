@@ -37,8 +37,8 @@ function renderWorkspaceList() {
     li.onclick = () => loadWorkspace(id);
 
     if (id === currentId) {
-      li.style.background = "rgba(255, 255, 255, 0.3)";
-      li.style.outline = "1px solid rgba(255, 255, 255, 0.5)";
+      li.style.background = "rgba(255, 255, 255, 0.1)";
+      li.style.outline = "1px solid rgba(255, 255, 255, 0.3)";
 
       const closeBtn = createIconButton("❌", () => closeWorkspaceTabs(id));
       const deleteBtn = createIconButton("🗑", () => deleteWorkspace(id));
@@ -140,7 +140,8 @@ function renderWorkspaceTabs() {
 
     chrome.tabs.query({}, (tabs) => {
       if (tabs.find((t) => t.url === link.url)) {
-        li.style.background = "rgba(255, 255, 255, 0.3)";
+        li.style.background = "rgba(255, 255, 255, 0.1)";
+        li.style.outline = "1px solid rgba(255, 255, 255, 0.3)";
       }
     });
 
