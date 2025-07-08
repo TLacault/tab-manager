@@ -1,10 +1,9 @@
 let workspaces = {};
 let currentId = null;
 
+// Load saved workspaces & last opened workspace
 chrome.storage.local.get(["workspaces", "lastWorkspaceId"], (data) => {
-  if (data.workspaces) {
-    workspaces = data.workspaces;
-  }
+  workspaces = data.workspaces || {};
   if (data.lastWorkspaceId && workspaces[data.lastWorkspaceId]) {
     loadWorkspace(data.lastWorkspaceId, true);
   } else {
@@ -12,6 +11,7 @@ chrome.storage.local.get(["workspaces", "lastWorkspaceId"], (data) => {
   }
 });
 
+// React to workspace updates from other sources
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.workspaces) {
     chrome.storage.local.get("workspaces", (data) => {
@@ -29,6 +29,7 @@ function saveData() {
 function renderWorkspaceList() {
   const list = document.getElementById("workspaceList");
   list.innerHTML = "";
+
   for (const id in workspaces) {
     const ws = workspaces[id];
     const li = document.createElement("li");
@@ -36,44 +37,41 @@ function renderWorkspaceList() {
     li.onclick = () => loadWorkspace(id);
 
     if (id === currentId) {
-      li.style.backgroundColor = "#d0e0ff";
-      const closeBtn = document.createElement("button");
-      closeBtn.textContent = "❌";
-      closeBtn.onclick = (e) => {
-        e.stopPropagation();
-        closeWorkspaceTabs(id);
-      };
-      li.appendChild(closeBtn);
+      li.style.background = "rgba(255, 255, 255, 0.3)";
+      li.style.outline = "1px solid rgba(255, 255, 255, 0.5)";
 
-      const deleteBtn = document.createElement("button");
-      deleteBtn.textContent = "🗑";
-      deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        deleteWorkspace(id);
-      };
-      li.appendChild(deleteBtn);
-
-      const renameBtn = document.createElement("button");
-      renameBtn.textContent = "✏️";
-      renameBtn.onclick = (e) => {
-        e.stopPropagation();
+      const closeBtn = createIconButton("❌", () => closeWorkspaceTabs(id));
+      const deleteBtn = createIconButton("🗑", () => deleteWorkspace(id));
+      const renameBtn = createIconButton("✏️", () => {
         const newName = prompt("Rename Workspace", ws.name);
         if (newName) {
           ws.name = newName;
           saveData();
           renderWorkspaceList();
         }
-      };
-      li.appendChild(renameBtn);
+      });
+
+      li.append(closeBtn, deleteBtn, renameBtn);
     }
 
     list.appendChild(li);
   }
 }
 
+function createIconButton(text, handler) {
+  const btn = document.createElement("button");
+  btn.textContent = text;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    handler();
+  };
+  return btn;
+}
+
 function loadWorkspace(id, skipOpen = false) {
   if (currentId === id && !skipOpen) return;
   currentId = id;
+
   chrome.runtime.sendMessage({ type: "setWorkspace", workspaceId: id });
   chrome.storage.local.set({ lastWorkspaceId: id });
 
@@ -113,107 +111,86 @@ function renderWorkspaceTabs() {
     const link = document.createElement("a");
     link.href = "#";
     link.textContent = tab.title || tab.url;
-    link.onclick = () => {
-      chrome.tabs.query({}, (tabs) => {
-        const target = tabs.find((t) => t.url === tab.url);
-        if (target) chrome.tabs.update(target.id, { active: true });
-      });
-    };
+    link.onclick = () => openOrActivateTab(tab.url);
 
-    const closeBtn = document.createElement("button");
-    closeBtn.textContent = "❌";
-    closeBtn.onclick = () => {
-      chrome.tabs.query({}, (tabs) => {
-        const target = tabs.find((t) => t.url === tab.url);
-        if (target) chrome.tabs.remove(target.id);
-      });
-      workspaces[currentId].tabs.splice(index, 1);
+    const closeBtn = createIconButton("❌", () => {
+      closeTabByUrl(tab.url);
+      ws.tabs.splice(index, 1);
       saveData();
       renderWorkspaceTabs();
-    };
-    li.appendChild(closeBtn);
+    });
 
-    const saveBtn = document.createElement("button");
-    saveBtn.textContent = "📁";
-    saveBtn.onclick = () => {
-      workspaces[currentId].resources.push(tab);
+    const saveBtn = createIconButton("📁", () => {
+      ws.resources.push(tab);
       saveData();
       renderWorkspaceTabs();
-    };
-    li.appendChild(saveBtn);
+    });
 
-    const websiteIcon = document.createElement("img");
-    websiteIcon.src = `https://www.google.com/s2/favicons?domain=${link.url}`;
-    li.appendChild(websiteIcon);
+    const websiteIcon = createFavicon(tab.url);
 
-    li.appendChild(link);
+    li.append(closeBtn, saveBtn, websiteIcon, link);
     tabList.appendChild(li);
   });
 
   (ws.resources || []).forEach((link, i) => {
+    const li = document.createElement("li");
     const a = document.createElement("a");
     a.href = "#";
     a.textContent = link.title || link.url;
 
-    const li = document.createElement("li");
     chrome.tabs.query({}, (tabs) => {
-      const match = tabs.find((t) => t.url === link.url);
-      if (match) {
-        li.style.backgroundColor = "#d5e7ff";
+      if (tabs.find((t) => t.url === link.url)) {
+        li.style.background = "rgba(255, 255, 255, 0.3)";
       }
     });
 
-    a.onclick = () => {
-      chrome.tabs.query({}, (tabs) => {
-        const match = tabs.find((t) => t.url === link.url);
-        if (match) {
-          chrome.tabs.update(match.id, { active: true });
-        } else {
-          chrome.tabs.create({ url: link.url, active: false });
-        }
-      });
-    };
+    a.onclick = () => openOrActivateTab(link.url);
 
-    const removeBtn = document.createElement("button");
-    removeBtn.textContent = "🗑";
-    removeBtn.onclick = () => {
-      workspaces[currentId].resources.splice(i, 1);
+    const removeBtn = createIconButton("🗑", () => {
+      ws.resources.splice(i, 1);
       saveData();
       renderWorkspaceTabs();
-    };
-    li.appendChild(removeBtn);
+    });
 
-    const renameBtn = document.createElement("button");
-    renameBtn.textContent = "✏️";
-    renameBtn.onclick = () => {
+    const renameBtn = createIconButton("✏️", () => {
       const newName = prompt("Rename Resource", link.title || link.url);
       if (newName) {
         link.title = newName;
         saveData();
         renderWorkspaceTabs();
       }
-    };
-    li.appendChild(renameBtn);
+    });
 
-    // const resetNameBtn = document.createElement("button");
-    // resetNameBtn.textContent = "🔄";
-    // resetNameBtn.onclick = () => {
-    //   link.title = link.url;
-    //   saveData();
-    //   renderWorkspaceTabs();
-    // };
-    // li.appendChild(resetNameBtn);
+    const websiteIcon = createFavicon(link.url);
 
-    const websiteIcon = document.createElement("img");
-    websiteIcon.src = `https://www.google.com/s2/favicons?domain=${link.url}`;
-    if (!link.url.startsWith("http")) {
-      websiteIcon.src = "https://www.google.com/s2/favicons?domain=example.com";
-    }
-    li.appendChild(websiteIcon);
-
-    li.appendChild(a);
+    li.append(removeBtn, renameBtn, websiteIcon, a);
     resList.appendChild(li);
   });
+}
+
+function openOrActivateTab(url) {
+  chrome.tabs.query({}, (tabs) => {
+    const match = tabs.find((t) => t.url === url);
+    if (match) {
+      chrome.tabs.update(match.id, { active: true });
+    } else {
+      chrome.tabs.create({ url, active: false });
+    }
+  });
+}
+
+function closeTabByUrl(url) {
+  chrome.tabs.query({}, (tabs) => {
+    const target = tabs.find((t) => t.url === url);
+    if (target) chrome.tabs.remove(target.id);
+  });
+}
+
+function createFavicon(url) {
+  const img = document.createElement("img");
+  const domain = url.startsWith("http") ? new URL(url).hostname : "example.com";
+  img.src = `https://www.google.com/s2/favicons?domain=${domain}`;
+  return img;
 }
 
 function addWorkspace() {

@@ -14,8 +14,7 @@
         "service_worker": "background.js"
     },
     "action": {
-        "default_title": "Open Tab Manager",
-        "default_popup": "app/index.html"
+        "default_title": "Open Tab Manager"
     },
     "icons": {
         "128": "icons/icon.png"

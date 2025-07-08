@@ -43,3 +43,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     chrome.storage.local.set({ workspaces: data.workspaces });
   });
 });
+
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("app/index.html") });
+});
