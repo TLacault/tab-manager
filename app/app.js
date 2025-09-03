@@ -40,9 +40,13 @@ function renderWorkspaceList() {
       li.style.background = "rgba(255, 255, 255, 0.1)";
       li.style.outline = "1px solid rgba(255, 255, 255, 0.3)";
 
-      const closeBtn = createIconButton("❌", () => closeWorkspaceTabs(id));
-      const deleteBtn = createIconButton("🗑", () => deleteWorkspace(id));
-      const renameBtn = createIconButton("✏️", () => {
+      const closeBtn = createIconButton("close-large-fill", () =>
+        closeWorkspaceTabs(id)
+      );
+      const deleteBtn = createIconButton("delete-bin-5-fill", () =>
+        deleteWorkspace(id)
+      );
+      const renameBtn = createIconButton("edit-fill", () => {
         const newName = prompt("Rename Workspace", ws.name);
         if (newName) {
           ws.name = newName;
@@ -58,9 +62,9 @@ function renderWorkspaceList() {
   }
 }
 
-function createIconButton(text, handler) {
+function createIconButton(icon, handler) {
   const btn = document.createElement("button");
-  btn.textContent = text;
+  btn.innerHTML = `<i class="ri-${icon}"></i>`;
   btn.onclick = (e) => {
     e.stopPropagation();
     handler();
@@ -113,14 +117,14 @@ function renderWorkspaceTabs() {
     link.textContent = tab.title || tab.url;
     link.onclick = () => openOrActivateTab(tab.url);
 
-    const closeBtn = createIconButton("❌", () => {
+    const closeBtn = createIconButton("close-large-fill", () => {
       closeTabByUrl(tab.url);
       ws.tabs.splice(index, 1);
       saveData();
       renderWorkspaceTabs();
     });
 
-    const saveBtn = createIconButton("📁", () => {
+    const saveBtn = createIconButton("bookmark-fill", () => {
       ws.resources.push(tab);
       saveData();
       renderWorkspaceTabs();
@@ -147,13 +151,13 @@ function renderWorkspaceTabs() {
 
     a.onclick = () => openOrActivateTab(link.url);
 
-    const removeBtn = createIconButton("🗑", () => {
+    const removeBtn = createIconButton("delete-bin-5-fill", () => {
       ws.resources.splice(i, 1);
       saveData();
       renderWorkspaceTabs();
     });
 
-    const renameBtn = createIconButton("✏️", () => {
+    const renameBtn = createIconButton("edit-fill", () => {
       const newName = prompt("Rename Resource", link.title || link.url);
       if (newName) {
         link.title = newName;

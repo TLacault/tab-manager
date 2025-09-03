@@ -59,6 +59,7 @@ body {
   width: 300px;
   padding: 1rem;
   overflow-y: auto;
+  backdrop-filter: blur(100px);
 }
 
 #main {
@@ -66,7 +67,7 @@ body {
   flex-direction: column;
 
   flex-grow: 1;
-  padding: 20px;
+  padding: 20px 40px 0;
   overflow-y: auto;
 }
 
@@ -81,7 +82,14 @@ body {
   margin-bottom: 10px;
   font-size: 15px;
   font-weight: bold;
-  background: radial-gradient(circle at top left, #5e86ff 20%, #69fffd);
+  background: white;
+  /* background: radial-gradient(
+    circle at top left,
+    #d13cff,
+    #943cff,
+    #699eff 30%,
+    #00ffc3 80%
+  ); */
   padding: 0.8rem 1.5rem;
   border-radius: 5px;
   background-clip: text;
@@ -137,27 +145,39 @@ body {
       background: rgba(255, 255, 255, 0.4);
       /* outline: 1px solid rgba(255, 255, 255, 1); */
     }
+
+    & button {
+      color: white;
+    }
   }
 
   & button {
     background: none;
     border: none;
+    color: black;
+    font-size: 16px;
+    padding: 5px;
+    border-radius: 5px;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
   }
 }
 
 #main {
   & h2 {
-    font-size: 25px;
-    padding: 0.8rem 1.5rem;
-    margin-bottom: 20px;
+    font-size: 20px;
+    margin: 10px 0 10px;
     text-transform: capitalize;
     background: rgba(255, 255, 255, 0.3);
     outline: 1px solid rgba(255, 255, 255, 0.5);
-    padding: 15px 50px;
+    padding: 10px 30px;
     border-radius: 100px;
     color: #fff;
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
     width: fit-content;
+    backdrop-filter: blur(5px);
   }
 
   & h3 {
@@ -187,7 +207,7 @@ body {
   & li {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 5px;
     padding: 10px;
     border-radius: 5px;
     cursor: pointer;
@@ -197,33 +217,50 @@ body {
     color: #fff;
     font-size: 14px;
 
-    &:hover {
-      outline: 2px solid #3e57fc;
+    & button:hover {
+      background: rgba(255, 255, 255, 0.3);
     }
 
-    & button:hover {
-      background: #3e57fc;
+    & img {
+      min-width: 25px;
+      aspect-ratio: 1 / 1;
+      margin: 0 10px 0;
+    }
+
+    & button {
+      color: white;
     }
   }
 
   .opened li {
     background: rgba(255, 255, 255, 0.1);
     outline: 1px solid rgba(255, 255, 255, 0.3);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(1px);
+    }
   }
 
   .res li {
     background: rgba(255, 255, 255, 0);
     outline: 1px solid rgba(255, 255, 255, 0.1);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(1px);
+    }
   }
 
   & button {
-    background: rgba(255, 255, 255, 0.3);
+    background: transparent;
     color: black;
     border: none;
     padding: 10px;
     border-radius: 5px;
     cursor: pointer;
     outline: 2px solid transparent;
+    font-size: 16px;
   }
 
   & #addResourceCategory {
@@ -246,7 +283,7 @@ body {
 
 .links {
   display: flex;
-  gap: 50px;
+  gap: 30px;
 
   & .opened,
   & .res {
