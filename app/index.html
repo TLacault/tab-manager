@@ -14,29 +14,54 @@
         <i class="ri-window-2-fill"></i>
         <h1>Tab Manager</h1>
       </div>
+      <h2 class="sub-title">Workspaces</h2>
+      <div class="workspace-list-container">
+        <ul id="workspaceList"></ul>
+      </div>
       <button id="addWorkspaceBtn">
         New Workspace
         <i class="ri-add-circle-line"></i>
       </button>
-      <ul id="workspaceList"></ul>
+      <button id="addFolderBtn">
+        New Folder
+        <i class="ri-folder-add-line"></i>
+      </button>
     </div>
 
     <div id="main">
       <h2 id="workspaceTitle">Select a workspace</h2>
       <div class="links">
         <div class="opened">
-          <h3>Open Tabs</h3>
+          <div class="section-header">
+            <h3>Open Tabs</h3>
+            <button id="closeAllTabsBtn">
+              <span>Close All</span>
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
           <ul id="tabList"></ul>
         </div>
-        <div class="res">
-          <h3>Resources</h3>
-          <ul id="resourceList"></ul>
-          <button id="addResourceCategory">
-            New Category
-            <i class="ri-add-circle-line"></i>
-          </button>
+        <div class="resources-section">
+          <div class="section-header">
+            <h3>Resources</h3>
+            <button id="addResourceCategory">
+              <span>New Category</span>
+              <i class="ri-add-circle-line"></i>
+            </button>
+          </div>
+          <div id="resourceList"></div>
         </div>
       </div>
+    </div>
+
+    <div class="attribution">
+      Made with <i class="ri-heart-fill"></i> by
+      <a
+        href="https://github.com/TLacault"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Tim Lacault</a
+      >
     </div>
 
     <script src="app.js"></script>
