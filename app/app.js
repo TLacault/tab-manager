@@ -847,7 +847,7 @@ function renderWorkspaceTabs() {
         const settingsBtn = createIconButton("more-2-line", () => {
           const menuItems = [
             { name: "Rename", icon: "edit-fill", action: "rename" },
-            { name: "Move to Category", icon: "bookmark-fill", action: "move" },
+            { name: "Move Resource", icon: "bookmark-fill", action: "move" },
             { name: "Delete", icon: "delete-bin-5-fill", action: "delete" },
           ];
 
