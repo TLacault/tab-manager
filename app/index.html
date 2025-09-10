@@ -54,14 +54,248 @@
       </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="settings-modal">
+      <div class="settings-backdrop"></div>
+      <div class="settings-content">
+        <div class="settings-header">
+          <h2>Settings</h2>
+          <button id="closeSettingsBtn" class="close-settings-btn">
+            <i class="ri-close-line"></i>
+          </button>
+        </div>
+        <div class="settings-body">
+          <div class="settings-section">
+            <h3><i class="ri-image-line"></i> Background</h3>
+            <div class="background-gallery">
+              <div class="background-options">
+                <div class="background-item active" data-bg="gradient.jpg">
+                  <img src="../assets/gradient.jpg" alt="Gradient" />
+                  <span>Gradient</span>
+                </div>
+                <div class="background-item" data-bg="background.jpeg">
+                  <img src="../assets/background.jpeg" alt="Background" />
+                  <span>Background</span>
+                </div>
+                <div class="background-item" data-bg="background_02.webp">
+                  <img src="../assets/background_02.webp" alt="Background 2" />
+                  <span>Background 2</span>
+                </div>
+                <div class="background-item" data-bg="background_03.avif">
+                  <img src="../assets/background_03.avif" alt="Background 3" />
+                  <span>Background 3</span>
+                </div>
+                <div class="background-item custom-upload" data-bg="custom">
+                  <div class="upload-placeholder">
+                    <i class="ri-upload-cloud-2-line"></i>
+                    <span>Custom</span>
+                  </div>
+                </div>
+              </div>
+              <input
+                type="file"
+                id="customBackgroundInput"
+                accept="image/*"
+                style="display: none"
+              />
+            </div>
+            <div class="background-controls">
+              <div class="control-group">
+                <label for="grainOpacitySlider">
+                  <i class="ri-contrast-line"></i> Grain Opacity
+                </label>
+                <div class="slider-container">
+                  <input
+                    type="range"
+                    id="grainOpacitySlider"
+                    min="0"
+                    max="100"
+                    value="10"
+                    class="slider"
+                  />
+                  <span class="slider-value">10%</span>
+                </div>
+              </div>
+              <div class="control-group">
+                <label for="backgroundBlurSlider">
+                  <i class="ri-blur-off-line"></i> Background Blur
+                </label>
+                <div class="slider-container">
+                  <input
+                    type="range"
+                    id="backgroundBlurSlider"
+                    min="0"
+                    max="20"
+                    value="0"
+                    class="slider"
+                  />
+                  <span class="slider-value">0px</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3><i class="ri-keyboard-line"></i> Keybinds</h3>
+            <div class="keybinds-container">
+              <div class="keybinds-categories">
+                <div class="keybind-category">
+                  <h4><i class="ri-window-2-line"></i> Workspace Management</h4>
+                  <div class="keybind-list">
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Switch to workspace 1-9</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>1-9</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">New workspace</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>N</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">New folder</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Close current workspace tabs</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>W</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Close all tabs</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>W</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="keybind-category">
+                  <h4><i class="ri-window-line"></i> Tab Operations</h4>
+                  <div class="keybind-list">
+                    <div class="keybind-item">
+                      <span class="keybind-action">Open new tab</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>T</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Save current tab to resources</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Quick search/filter tabs</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>K</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Close selected tab</span>
+                      <div class="keybind-keys">
+                        <kbd>Delete</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Open/activate selected tab</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Enter</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="keybind-category">
+                  <h4><i class="ri-bookmark-line"></i> Resource Management</h4>
+                  <div class="keybind-list">
+                    <div class="keybind-item">
+                      <span class="keybind-action">New resource category</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action"
+                        >Open all resources in category</span
+                      >
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Bookmark current tab</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>B</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="keybind-category">
+                  <h4><i class="ri-settings-3-line"></i> Interface</h4>
+                  <div class="keybind-list">
+                    <div class="keybind-item">
+                      <span class="keybind-action">Open settings</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>,</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Close modals/popups</span>
+                      <div class="keybind-keys">
+                        <kbd>Escape</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Show keybind help</span>
+                      <div class="keybind-keys">
+                        <kbd>Ctrl</kbd> + <kbd>/</kbd>
+                      </div>
+                    </div>
+                    <div class="keybind-item">
+                      <span class="keybind-action">Toggle keybind help</span>
+                      <div class="keybind-keys">
+                        <kbd>F1</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="attribution">
-      Made with <i class="ri-heart-fill"></i> by
-      <a
-        href="https://github.com/TLacault"
-        target="_blank"
-        rel="noopener noreferrer"
-        >Tim Lacault</a
-      >
+      <div class="attribution-text">
+        Made with <i class="ri-heart-fill"></i> by
+        <a
+          href="https://github.com/TLacault"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Tim Lacault</a
+        >
+      </div>
+      <button id="settingsBtn" class="settings-button">
+        <i class="ri-settings-3-line"></i>
+        <span>Settings</span>
+      </button>
     </div>
 
     <script src="app.js"></script>

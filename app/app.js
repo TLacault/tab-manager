@@ -1,13 +1,79 @@
 let workspaces = {};
 let folders = {};
 let currentId = null;
+let currentBackground = "gradient.jpg";
+let selectedTabIndex = -1;
+let recentTabs = []; // Track last 10 tabs visited across all workspaces
+let keybinds = {
+  // Workspace Management
+  "ctrl+1": "switchWorkspace1",
+  "ctrl+2": "switchWorkspace2",
+  "ctrl+3": "switchWorkspace3",
+  "ctrl+4": "switchWorkspace4",
+  "ctrl+5": "switchWorkspace5",
+  "ctrl+6": "switchWorkspace6",
+  "ctrl+7": "switchWorkspace7",
+  "ctrl+8": "switchWorkspace8",
+  "ctrl+9": "switchWorkspace9",
+  "ctrl+n": "newWorkspace",
+  "ctrl+shift+n": "newFolder",
+  "ctrl+w": "closeCurrentWorkspaceTabs",
+  "ctrl+shift+w": "closeAllTabs",
+
+  // Tab Operations
+  "ctrl+t": "openNewTab",
+  "ctrl+shift+t": "saveCurrentTab",
+  "ctrl+k": "quickSearch",
+  delete: "closeSelectedTab",
+  enter: "openSelectedTab",
+
+  // Resource Management
+  "ctrl+shift+c": "newResourceCategory",
+  "ctrl+shift+o": "openAllResources",
+  "ctrl+b": "bookmarkCurrentTab",
+
+  // Interface
+  "ctrl+,": "openSettings",
+  escape: "closeModals",
+  "ctrl+/": "showKeybindHelp",
+  f1: "toggleKeybindHelp",
+};
 
 // Load saved workspaces & last opened workspace
 chrome.storage.local.get(
-  ["workspaces", "folders", "lastWorkspaceId"],
+  [
+    "workspaces",
+    "folders",
+    "lastWorkspaceId",
+    "currentBackground",
+    "grainOpacity",
+    "backgroundBlur",
+    "recentTabs",
+  ],
   (data) => {
     workspaces = data.workspaces || {};
     folders = data.folders || {};
+    currentBackground = data.currentBackground || "gradient.jpg";
+    recentTabs = data.recentTabs || [];
+
+    // Load the saved background
+    loadBackground(currentBackground);
+
+    // Load saved background control values
+    const grainOpacity = data.grainOpacity || 10;
+    const backgroundBlur = data.backgroundBlur || 0;
+
+    // Apply grain opacity
+    const grainElement = document.querySelector(".noise");
+    if (grainElement) {
+      grainElement.style.opacity = grainOpacity / 100;
+    }
+
+    // Apply background blur
+    const gradientElement = document.querySelector(".gradient");
+    if (gradientElement) {
+      gradientElement.style.filter = `brightness(0.5) blur(${backgroundBlur}px)`;
+    }
 
     // Migrate old workspace structure to new resource categories structure
     for (const id in workspaces) {
@@ -61,8 +127,62 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// Track tab activation to build recent tabs list
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.get(activeInfo.tabId, (tab) => {
+    if (tab && !tab.url.includes("app/index.html")) {
+      // Find which workspace this tab belongs to
+      let foundWorkspaceId = null;
+      Object.keys(workspaces).forEach((workspaceId) => {
+        const ws = workspaces[workspaceId];
+        if (ws.tabs && ws.tabs.some((t) => t.url === tab.url)) {
+          foundWorkspaceId = workspaceId;
+        }
+        if (ws.resourceCategories) {
+          Object.keys(ws.resourceCategories).forEach((category) => {
+            if (
+              ws.resourceCategories[category].some((r) => r.url === tab.url)
+            ) {
+              foundWorkspaceId = workspaceId;
+            }
+          });
+        }
+      });
+
+      if (foundWorkspaceId) {
+        addToRecentTabs(tab, foundWorkspaceId);
+      }
+    }
+  });
+});
+
 function saveData() {
-  chrome.storage.local.set({ workspaces, folders });
+  chrome.storage.local.set({ workspaces, folders, recentTabs });
+}
+
+function addToRecentTabs(tab, workspaceId) {
+  const tabWithWorkspace = {
+    ...tab,
+    workspaceId: workspaceId,
+    timestamp: Date.now(),
+  };
+
+  // Remove if already exists
+  recentTabs = recentTabs.filter((t) => t.url !== tab.url);
+
+  // Add to beginning
+  recentTabs.unshift(tabWithWorkspace);
+
+  // Keep only last 10
+  recentTabs = recentTabs.slice(0, 10);
+
+  // Save to storage
+  chrome.storage.local.set({ recentTabs });
+}
+
+function getWorkspaceName(workspaceId) {
+  if (!workspaceId || !workspaces[workspaceId]) return "Unknown";
+  return workspaces[workspaceId].name;
 }
 
 function updateWorkspaceTitle(ws) {
@@ -116,8 +236,16 @@ function createWorkspaceItem(id, ws) {
   const li = document.createElement("li");
 
   const workspaceName = document.createElement("span");
-  workspaceName.textContent = ws.name;
-  workspaceName.onclick = () => loadWorkspace(id);
+  const iconClass = id === currentId ? "ri-window-2-fill" : "ri-window-2-line";
+  workspaceName.innerHTML = `<i class="${iconClass}" style="margin-right: 8px;"></i>${ws.name}`;
+
+  // Make the entire li clickable
+  li.onclick = (e) => {
+    // Don't trigger if clicking on buttons
+    if (!e.target.closest("button")) {
+      loadWorkspace(id);
+    }
+  };
 
   // Create settings button for workspace
   const settingsBtn = createIconButton("more-2-line", () => {
@@ -186,7 +314,14 @@ function createFolderItem(folderId, folder) {
 
   const folderName = document.createElement("span");
   folderName.innerHTML = `<i class="ri-folder-fill" style="margin-right: 8px;"></i>${folder.name}`;
-  folderName.onclick = () => toggleFolder(folderId);
+
+  // Make the entire folder header clickable
+  folderHeader.onclick = (e) => {
+    // Don't trigger if clicking on buttons
+    if (!e.target.closest("button")) {
+      toggleFolder(folderId);
+    }
+  };
 
   const settingsBtn = createIconButton("more-2-line", () => {
     const menuItems = [
@@ -236,6 +371,17 @@ function createIconButton(icon, handler) {
   return btn;
 }
 
+function createTextButton(text, icon, handler) {
+  const btn = document.createElement("button");
+  btn.innerHTML = `<span>${text}</span><i class="ri-${icon}"></i>`;
+  btn.className = "text-button";
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    handler();
+  };
+  return btn;
+}
+
 function createCategoryPopup(tabUrl, onSelect, currentCategory = null) {
   const popup = document.createElement("div");
   popup.className = "category-popup";
@@ -261,20 +407,16 @@ function createCategoryPopup(tabUrl, onSelect, currentCategory = null) {
     categoryItem.style.margin = "2px 8px";
 
     const categoryNameSpan = document.createElement("span");
-    categoryNameSpan.textContent = categoryName;
-
-    const indicator = document.createElement("span");
-    indicator.className = "category-indicator";
-    indicator.style.fontSize = "16px";
-    indicator.style.color = "#4caf50";
-    indicator.style.fontWeight = "600";
+    categoryNameSpan.innerHTML = `<i class="ri-bookmark-line" style="margin-right: 8px;"></i>${categoryName}`;
 
     // Check if tab is already in this category
     const isInCategory = ws.resourceCategories[categoryName].some(
       (resource) => resource.url === tabUrl
     );
     if (isInCategory) {
-      indicator.innerHTML = '<i class="ri-check-line"></i>';
+      // Update the bookmark icon to filled version
+      const bookmarkIcon = categoryNameSpan.querySelector("i");
+      bookmarkIcon.className = "ri-bookmark-3-fill";
       categoryItem.classList.add("already-saved");
       categoryItem.style.background = "rgba(76, 175, 80, 0.15)";
       categoryItem.style.color = "#4caf50";
@@ -302,7 +444,7 @@ function createCategoryPopup(tabUrl, onSelect, currentCategory = null) {
       }
     });
 
-    categoryItem.append(categoryNameSpan, indicator);
+    categoryItem.append(categoryNameSpan);
 
     categoryItem.onclick = (e) => {
       e.stopPropagation();
@@ -728,7 +870,7 @@ function renderWorkspaceTabs() {
       const settingsBtn = createIconButton("more-2-line", () => {
         const menuItems = [
           { name: "Rename", icon: "edit-fill", action: "rename" },
-          { name: "Save to Category", icon: "bookmark-fill", action: "save" },
+          { name: "Save to resource", icon: "bookmark-fill", action: "save" },
         ];
 
         showSettingsPopup(settingsBtn, menuItems, (action) => {
@@ -782,6 +924,11 @@ function renderWorkspaceTabs() {
       const categoryHeader = document.createElement("div");
       categoryHeader.className = "category-header";
 
+      // Add collapsed class if category is collapsed
+      if (ws.categoryStates && ws.categoryStates[categoryName]) {
+        categoryHeader.classList.add("collapsed");
+      }
+
       const categoryToggle = createIconButton(
         ws.categoryStates && ws.categoryStates[categoryName]
           ? "arrow-right-s-line"
@@ -797,6 +944,14 @@ function renderWorkspaceTabs() {
 
       const categoryActions = document.createElement("div");
       categoryActions.className = "category-actions";
+
+      const openAllBtn = createTextButton(
+        "Open All",
+        "external-link-line",
+        () => {
+          openAllResourcesInCategory(categoryName);
+        }
+      );
 
       const renameCategoryBtn = createIconButton("edit-fill", () => {
         const newName = prompt("Rename Category", categoryName);
@@ -821,13 +976,25 @@ function renderWorkspaceTabs() {
         }
       });
 
-      categoryActions.append(renameCategoryBtn, deleteCategoryBtn);
+      categoryActions.append(openAllBtn, renameCategoryBtn, deleteCategoryBtn);
       categoryHeader.append(categoryToggle, categoryTitle, categoryActions);
 
       const categoryList = document.createElement("ul");
       categoryList.className = "category-resources";
       categoryList.style.display =
         ws.categoryStates && ws.categoryStates[categoryName] ? "none" : "block";
+
+      // Show empty message if category is empty and not collapsed
+      if (
+        ws.resourceCategories[categoryName].length === 0 &&
+        (!ws.categoryStates || !ws.categoryStates[categoryName])
+      ) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "empty-category-message";
+        emptyMessage.innerHTML =
+          '<i class="ri-bookmark-line"></i> Add Resources Here';
+        categoryList.appendChild(emptyMessage);
+      }
 
       ws.resourceCategories[categoryName].forEach((link, i) => {
         const li = document.createElement("li");
@@ -837,12 +1004,17 @@ function renderWorkspaceTabs() {
 
         chrome.tabs.query({}, (tabs) => {
           if (tabs.find((t) => t.url === link.url)) {
-            li.style.background = "rgba(255, 255, 255, 0.1)";
-            li.style.outline = "1px solid rgba(255, 255, 255, 0.3)";
+            li.classList.add("resource-opened");
           }
         });
 
-        a.onclick = () => openOrActivateTab(link.url);
+        // Make the entire li clickable
+        li.onclick = (e) => {
+          // Don't trigger if clicking on buttons
+          if (!e.target.closest("button")) {
+            openOrActivateTab(link.url);
+          }
+        };
 
         const settingsBtn = createIconButton("more-2-line", () => {
           const menuItems = [
@@ -906,8 +1078,19 @@ function openOrActivateTab(url) {
     const match = tabs.find((t) => t.url === url);
     if (match) {
       chrome.tabs.update(match.id, { active: true });
+      // Track this tab visit
+      addToRecentTabs(match, currentId);
     } else {
       chrome.tabs.create({ url, active: false });
+      // For new tabs, we'll track them when they're created
+      // We'll need to get the tab info after creation
+      setTimeout(() => {
+        chrome.tabs.query({ url }, (newTabs) => {
+          if (newTabs.length > 0) {
+            addToRecentTabs(newTabs[0], currentId);
+          }
+        });
+      }, 100);
     }
   });
 }
@@ -922,7 +1105,96 @@ function closeTabByUrl(url) {
 function createFavicon(url) {
   const img = document.createElement("img");
   const domain = url.startsWith("http") ? new URL(url).hostname : "example.com";
-  img.src = `https://www.google.com/s2/favicons?domain=${domain}`;
+
+  // Try multiple favicon sources for better reliability
+  const faviconSources = [
+    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    `https://${domain}/favicon.ico`,
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=32`,
+  ];
+
+  let currentSourceIndex = 0;
+
+  const createFallbackIcon = () => {
+    const fallbackIcon = document.createElement("i");
+    fallbackIcon.className = "ri-global-fill";
+    fallbackIcon.style.fontSize = "20px";
+    fallbackIcon.style.color = "rgba(102, 126, 234, 0.8)";
+    fallbackIcon.style.minWidth = "20px";
+    fallbackIcon.style.textAlign = "center";
+    fallbackIcon.style.filter = "drop-shadow(0 0 4px rgba(102, 126, 234, 0.3))";
+
+    // Replace the img with the fallback icon
+    if (img.parentNode) {
+      img.parentNode.replaceChild(fallbackIcon, img);
+    }
+  };
+
+  const isDefaultGoogleFavicon = (imageElement) => {
+    // Create a canvas to analyze the image
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = 32;
+    canvas.height = 32;
+
+    try {
+      ctx.drawImage(imageElement, 0, 0, 32, 32);
+      const imageData = ctx.getImageData(0, 0, 32, 32);
+      const data = imageData.data;
+
+      // Check if the image is mostly the default Google favicon colors
+      // The default Google favicon is typically a simple globe with specific colors
+      let bluePixels = 0;
+      let totalPixels = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        if (a > 0) {
+          // Only count non-transparent pixels
+          totalPixels++;
+          // Check for the typical blue color of Google's default favicon
+          if (r < 100 && g < 150 && b > 150) {
+            bluePixels++;
+          }
+        }
+      }
+
+      // If more than 60% of the image is the default blue color, it's likely the default favicon
+      return totalPixels > 0 && bluePixels / totalPixels > 0.6;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const tryNextSource = () => {
+    if (currentSourceIndex < faviconSources.length) {
+      img.src = faviconSources[currentSourceIndex];
+      currentSourceIndex++;
+    } else {
+      // All sources failed, use fallback globe icon
+      createFallbackIcon();
+    }
+  };
+
+  // Handle successful image load
+  img.onload = () => {
+    // Check if this is the default Google favicon (ugly globe)
+    if (currentSourceIndex === 1 && isDefaultGoogleFavicon(img)) {
+      // Replace with our better-looking fallback icon
+      createFallbackIcon();
+    }
+  };
+
+  // Add error handling for fallback
+  img.onerror = tryNextSource;
+
+  // Start with the first source
+  tryNextSource();
+
   return img;
 }
 
@@ -1020,6 +1292,36 @@ function closeAllTabs() {
   });
 }
 
+function openAllResourcesInCategory(categoryName) {
+  if (!currentId) return;
+
+  const ws = workspaces[currentId];
+  if (!ws.resourceCategories || !ws.resourceCategories[categoryName]) return;
+
+  const resources = ws.resourceCategories[categoryName];
+  if (resources.length === 0) return;
+
+  // Get currently open tabs
+  chrome.tabs.query({}, (tabs) => {
+    const openUrls = tabs.map((tab) => tab.url);
+
+    // Filter resources that are not already open
+    const unopenedResources = resources.filter(
+      (resource) => !openUrls.includes(resource.url)
+    );
+
+    // Open all unopened resources without focusing them
+    unopenedResources.forEach((resource, index) => {
+      setTimeout(() => {
+        chrome.tabs.create({
+          url: resource.url,
+          active: false,
+        });
+      }, index * 100); // Small delay between each tab to avoid overwhelming the browser
+    });
+  });
+}
+
 function addFolder() {
   const name = prompt("Folder Name");
   if (!name) return;
@@ -1072,6 +1374,627 @@ function toggleFolder(folderId) {
   renderWorkspaceList();
 }
 
+// Settings functionality
+function loadBackground(backgroundName) {
+  const gradientImg = document.querySelector(".gradient");
+  if (backgroundName === "custom") {
+    // Load custom background from storage
+    chrome.storage.local.get("customBackgroundData", (data) => {
+      if (data.customBackgroundData) {
+        gradientImg.src = data.customBackgroundData;
+      }
+    });
+  } else {
+    gradientImg.src = `../assets/${backgroundName}`;
+  }
+}
+
+function saveBackground(backgroundName) {
+  currentBackground = backgroundName;
+  chrome.storage.local.set({ currentBackground });
+  loadBackground(backgroundName);
+}
+
+function showSettings() {
+  const modal = document.getElementById("settingsModal");
+  modal.classList.add("active");
+
+  // Update active background item
+  document.querySelectorAll(".background-item").forEach((item) => {
+    item.classList.remove("active");
+    if (item.dataset.bg === currentBackground) {
+      item.classList.add("active");
+    }
+  });
+
+  // Load current slider values
+  chrome.storage.local.get(["grainOpacity", "backgroundBlur"], (data) => {
+    const grainOpacity = data.grainOpacity || 10;
+    const backgroundBlur = data.backgroundBlur || 0;
+
+    const grainSlider = document.getElementById("grainOpacitySlider");
+    const blurSlider = document.getElementById("backgroundBlurSlider");
+
+    if (grainSlider) {
+      grainSlider.value = grainOpacity;
+      grainSlider.nextElementSibling.textContent = `${grainOpacity}%`;
+    }
+
+    if (blurSlider) {
+      blurSlider.value = backgroundBlur;
+      blurSlider.nextElementSibling.textContent = `${backgroundBlur}px`;
+    }
+  });
+}
+
+function hideSettings() {
+  const modal = document.getElementById("settingsModal");
+  modal.classList.remove("active");
+}
+
+function handleBackgroundSelection(backgroundName) {
+  if (backgroundName === "custom") {
+    document.getElementById("customBackgroundInput").click();
+    return;
+  }
+
+  saveBackground(backgroundName);
+  hideSettings();
+}
+
+function handleCustomBackgroundUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    chrome.storage.local.set({
+      customBackgroundData: dataUrl,
+      currentBackground: "custom",
+    });
+    currentBackground = "custom";
+    loadBackground("custom");
+    hideSettings();
+  };
+  reader.readAsDataURL(file);
+}
+
+// Keybind handler functions
+function handleKeybind(keybindName) {
+  switch (keybindName) {
+    // Workspace Management
+    case "switchWorkspace1":
+    case "switchWorkspace2":
+    case "switchWorkspace3":
+    case "switchWorkspace4":
+    case "switchWorkspace5":
+    case "switchWorkspace6":
+    case "switchWorkspace7":
+    case "switchWorkspace8":
+    case "switchWorkspace9":
+      const workspaceNumber = parseInt(keybindName.slice(-1));
+      switchToWorkspaceByNumber(workspaceNumber);
+      break;
+    case "newWorkspace":
+      addWorkspace();
+      break;
+    case "newFolder":
+      addFolder();
+      break;
+    case "closeCurrentWorkspaceTabs":
+      if (currentId) {
+        closeWorkspaceTabs(currentId);
+      }
+      break;
+    case "closeAllTabs":
+      closeAllTabs();
+      break;
+
+    // Tab Operations
+    case "openNewTab":
+      chrome.tabs.create({ url: "chrome://newtab/", active: true });
+      break;
+    case "saveCurrentTab":
+      saveCurrentActiveTab();
+      break;
+    case "quickSearch":
+      showQuickSearch();
+      break;
+    case "closeSelectedTab":
+      closeSelectedTab();
+      break;
+    case "openSelectedTab":
+      openSelectedTab();
+      break;
+
+    // Resource Management
+    case "newResourceCategory":
+      addResourceCategory();
+      break;
+    case "openAllResources":
+      openAllResourcesInCurrentCategory();
+      break;
+    case "bookmarkCurrentTab":
+      bookmarkCurrentActiveTab();
+      break;
+
+    // Interface
+    case "openSettings":
+      showSettings();
+      break;
+    case "closeModals":
+      hideSettings();
+      closeAllPopups();
+      break;
+    case "showKeybindHelp":
+      showKeybindHelp();
+      break;
+    case "toggleKeybindHelp":
+      toggleKeybindHelp();
+      break;
+  }
+}
+
+function switchToWorkspaceByNumber(number) {
+  const workspaceIds = Object.keys(workspaces);
+  if (workspaceIds.length >= number) {
+    const workspaceId = workspaceIds[number - 1];
+    loadWorkspace(workspaceId);
+  }
+}
+
+function saveCurrentActiveTab() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && !tabs[0].url.includes("app/index.html")) {
+      const tab = tabs[0];
+      if (currentId) {
+        const ws = workspaces[currentId];
+        if (!ws.resourceCategories) {
+          ws.resourceCategories = { General: [] };
+        }
+        if (!ws.resourceCategories.General) {
+          ws.resourceCategories.General = [];
+        }
+
+        // Check if already exists
+        const exists = ws.resourceCategories.General.some(
+          (r) => r.url === tab.url
+        );
+        if (!exists) {
+          ws.resourceCategories.General.push({
+            title: tab.title || tab.url,
+            url: tab.url,
+          });
+          saveData();
+          renderWorkspaceTabs();
+        }
+      }
+    }
+  });
+}
+
+function showQuickSearch() {
+  // Create a quick search overlay
+  const searchOverlay = document.createElement("div");
+  searchOverlay.className = "quick-search-overlay";
+  searchOverlay.innerHTML = `
+    <div class="quick-search-container">
+      <div class="quick-search-header">
+        <i class="ri-search-line"></i>
+        <input type="text" placeholder="Search tabs and resources..." class="quick-search-input" autofocus>
+      </div>
+      <div class="quick-search-results"></div>
+    </div>
+  `;
+
+  document.body.appendChild(searchOverlay);
+
+  const input = searchOverlay.querySelector(".quick-search-input");
+  const results = searchOverlay.querySelector(".quick-search-results");
+
+  // Focus the input immediately
+  setTimeout(() => {
+    input.focus();
+  }, 0);
+
+  input.addEventListener("input", (e) => {
+    const query = e.target.value.toLowerCase();
+    results.innerHTML = "";
+
+    if (query.length < 1) {
+      // Show recent items when no query
+      showRecentItems(results);
+      return;
+    }
+
+    // Search across all workspaces and resources
+    let hasResults = false;
+    const recentUrls = recentTabs.map((tab) => tab.url);
+    const foundTabs = new Map(); // Use Map to deduplicate by URL
+
+    // Search all workspaces
+    Object.keys(workspaces).forEach((workspaceId) => {
+      const ws = workspaces[workspaceId];
+      const workspaceName = getWorkspaceName(workspaceId);
+
+      // Search tabs in this workspace
+      if (ws.tabs) {
+        ws.tabs.forEach((tab) => {
+          if (
+            tab.title.toLowerCase().includes(query) ||
+            tab.url.toLowerCase().includes(query) ||
+            (tab.url.startsWith("http") &&
+              new URL(tab.url).hostname.toLowerCase().includes(query))
+          ) {
+            const isRecent = recentUrls.includes(tab.url);
+            const typeLabel = isRecent ? "Recent Tab" : "Tab";
+
+            // Check if we already have this URL
+            if (!foundTabs.has(tab.url)) {
+              foundTabs.set(tab.url, {
+                tab,
+                workspaceId,
+                workspaceName,
+                typeLabel,
+                isRecent,
+                isResource: false,
+              });
+            } else {
+              // If we already have this URL, check if this one is more recent
+              const existing = foundTabs.get(tab.url);
+              const existingRecent = recentTabs.find(
+                (rt) => rt.url === tab.url
+              );
+              const currentRecent = recentTabs.find((rt) => rt.url === tab.url);
+
+              // If current is recent and existing is not, or if current is more recent
+              if (
+                (isRecent && !existing.isRecent) ||
+                (isRecent &&
+                  existing.isRecent &&
+                  currentRecent &&
+                  existingRecent &&
+                  currentRecent.timestamp > existingRecent.timestamp)
+              ) {
+                foundTabs.set(tab.url, {
+                  tab,
+                  workspaceId,
+                  workspaceName,
+                  typeLabel,
+                  isRecent,
+                  isResource: false,
+                });
+              }
+            }
+          }
+        });
+      }
+
+      // Search resources in this workspace
+      if (ws.resourceCategories) {
+        Object.keys(ws.resourceCategories).forEach((category) => {
+          ws.resourceCategories[category].forEach((resource) => {
+            if (
+              resource.title.toLowerCase().includes(query) ||
+              resource.url.toLowerCase().includes(query) ||
+              (resource.url.startsWith("http") &&
+                new URL(resource.url).hostname.toLowerCase().includes(query))
+            ) {
+              const isRecent = recentUrls.includes(resource.url);
+              const typeLabel = isRecent ? "Recent Tab" : category;
+
+              // Check if we already have this URL
+              if (!foundTabs.has(resource.url)) {
+                foundTabs.set(resource.url, {
+                  tab: resource,
+                  workspaceId,
+                  workspaceName,
+                  typeLabel,
+                  isRecent,
+                  isResource: true,
+                });
+              } else {
+                // If we already have this URL, check if this one is more recent
+                const existing = foundTabs.get(resource.url);
+                const existingRecent = recentTabs.find(
+                  (rt) => rt.url === resource.url
+                );
+                const currentRecent = recentTabs.find(
+                  (rt) => rt.url === resource.url
+                );
+
+                // If current is recent and existing is not, or if current is more recent
+                if (
+                  (isRecent && !existing.isRecent) ||
+                  (isRecent &&
+                    existing.isRecent &&
+                    currentRecent &&
+                    existingRecent &&
+                    currentRecent.timestamp > existingRecent.timestamp)
+                ) {
+                  foundTabs.set(resource.url, {
+                    tab: resource,
+                    workspaceId,
+                    workspaceName,
+                    typeLabel,
+                    isRecent,
+                    isResource: true,
+                  });
+                }
+              }
+            }
+          });
+        });
+      }
+    });
+
+    // Display deduplicated results
+    foundTabs.forEach((item) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item";
+      const icon = item.isResource ? "ri-bookmark-line" : "ri-window-line";
+
+      // Create pins with icons
+      const pins = [];
+
+      // Always show workspace pin
+      const isCurrentWorkspace = item.workspaceId === currentId;
+      const workspacePinClass = isCurrentWorkspace
+        ? "pin workspace-pin current"
+        : "pin workspace-pin clickable";
+      pins.push(
+        `<span class="${workspacePinClass}" data-workspace-id="${item.workspaceId}"><i class="ri-window-2-line"></i>${item.workspaceName}</span>`
+      );
+
+      // Show recent pin only if it's in recent tabs
+      if (item.isRecent) {
+        pins.push(
+          `<span class="pin recent-pin"><i class="ri-time-line"></i>Recent</span>`
+        );
+      }
+
+      const pinsHtml = pins.join("");
+
+      resultItem.innerHTML = `<i class="${icon}"></i> <span class="result-title">${item.tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.onclick = () => {
+        openOrActivateTab(item.tab.url);
+        searchOverlay.remove();
+      };
+      results.appendChild(resultItem);
+      hasResults = true;
+    });
+
+    if (!hasResults) {
+      const noResults = document.createElement("div");
+      noResults.className = "no-results";
+      noResults.innerHTML = '<i class="ri-search-line"></i> No results found';
+      results.appendChild(noResults);
+    }
+
+    // Add workspace pin handlers for search results
+    setTimeout(addWorkspacePinHandlers, 0);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      searchOverlay.remove();
+    } else if (e.key === "Enter") {
+      const firstResult = results.querySelector(".search-result-item");
+      if (firstResult) {
+        firstResult.click();
+      }
+    }
+  });
+
+  // Close on backdrop click
+  searchOverlay.onclick = (e) => {
+    if (e.target === searchOverlay) {
+      searchOverlay.remove();
+    }
+  };
+
+  // Show recent items initially
+  showRecentItems(results);
+
+  // Add click handlers for workspace pins
+  const addWorkspacePinHandlers = () => {
+    const clickablePins = searchOverlay.querySelectorAll(
+      ".pin.workspace-pin.clickable"
+    );
+    clickablePins.forEach((pin) => {
+      pin.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const workspaceId = pin.dataset.workspaceId;
+        if (workspaceId && workspaceId !== currentId) {
+          loadWorkspace(workspaceId);
+          searchOverlay.remove();
+        }
+      });
+    });
+  };
+
+  // Add handlers after initial render
+  setTimeout(addWorkspacePinHandlers, 0);
+}
+
+function showRecentItems(results) {
+  results.innerHTML = "";
+
+  if (recentTabs.length > 0) {
+    recentTabs.forEach((tab) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item recent-item";
+      const workspaceName = getWorkspaceName(tab.workspaceId);
+
+      // Create pins with icons
+      const pins = [];
+      const isCurrentWorkspace = tab.workspaceId === currentId;
+      const workspacePinClass = isCurrentWorkspace
+        ? "pin workspace-pin current"
+        : "pin workspace-pin clickable";
+      pins.push(
+        `<span class="${workspacePinClass}" data-workspace-id="${tab.workspaceId}"><i class="ri-window-2-line"></i>${workspaceName}</span>`
+      );
+      pins.push(
+        `<span class="pin recent-pin"><i class="ri-time-line"></i>Recent</span>`
+      );
+
+      const pinsHtml = pins.join("");
+
+      resultItem.innerHTML = `<i class="ri-window-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.onclick = () => {
+        openOrActivateTab(tab.url);
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+    });
+  } else {
+    const noItems = document.createElement("div");
+    noItems.className = "no-results";
+    noItems.innerHTML = '<i class="ri-inbox-line"></i> No recent items';
+    results.appendChild(noItems);
+  }
+}
+
+function closeSelectedTab() {
+  if (selectedTabIndex >= 0 && currentId) {
+    const ws = workspaces[currentId];
+    if (ws.tabs && ws.tabs[selectedTabIndex]) {
+      const tab = ws.tabs[selectedTabIndex];
+      closeTabByUrl(tab.url);
+      ws.tabs.splice(selectedTabIndex, 1);
+      saveData();
+      renderWorkspaceTabs();
+      selectedTabIndex = -1;
+    }
+  }
+}
+
+function openSelectedTab() {
+  if (selectedTabIndex >= 0 && currentId) {
+    const ws = workspaces[currentId];
+    if (ws.tabs && ws.tabs[selectedTabIndex]) {
+      const tab = ws.tabs[selectedTabIndex];
+      openOrActivateTab(tab.url);
+    }
+  }
+}
+
+function openAllResourcesInCurrentCategory() {
+  // This would open all resources in the first available category
+  // For now, we'll open all resources in the General category
+  if (currentId) {
+    const ws = workspaces[currentId];
+    if (ws.resourceCategories && ws.resourceCategories.General) {
+      openAllResourcesInCategory("General");
+    }
+  }
+}
+
+function bookmarkCurrentActiveTab() {
+  saveCurrentActiveTab();
+}
+
+function closeAllPopups() {
+  const popups = document.querySelectorAll(".category-popup");
+  popups.forEach((popup) => popup.remove());
+}
+
+function showKeybindHelp() {
+  showSettings();
+  // Scroll to keybinds section
+  setTimeout(() => {
+    const keybindsSection = document.querySelector(".keybind-category");
+    if (keybindsSection) {
+      keybindsSection.scrollIntoView({ behavior: "smooth" });
+    }
+  }, 100);
+}
+
+function toggleKeybindHelp() {
+  showKeybindHelp();
+}
+
+// Background control functions
+function handleGrainOpacityChange(event) {
+  const value = event.target.value;
+  const valueDisplay = event.target.nextElementSibling;
+  valueDisplay.textContent = `${value}%`;
+
+  // Apply grain opacity
+  const grainElement = document.querySelector(".noise");
+  if (grainElement) {
+    grainElement.style.opacity = value / 100;
+  }
+
+  // Save to storage
+  chrome.storage.local.set({ grainOpacity: value });
+}
+
+function handleBackgroundBlurChange(event) {
+  const value = event.target.value;
+  const valueDisplay = event.target.nextElementSibling;
+  valueDisplay.textContent = `${value}px`;
+
+  // Apply background blur
+  const gradientElement = document.querySelector(".gradient");
+  if (gradientElement) {
+    gradientElement.style.filter = `brightness(0.5) blur(${value}px)`;
+  }
+
+  // Save to storage
+  chrome.storage.local.set({ backgroundBlur: value });
+}
+
+// Keyboard event listener
+document.addEventListener("keydown", (e) => {
+  // Don't trigger keybinds when typing in inputs or when modals are open
+  if (
+    e.target.tagName === "INPUT" ||
+    e.target.tagName === "TEXTAREA" ||
+    document.querySelector(".settings-modal.active") ||
+    document.querySelector(".quick-search-overlay")
+  ) {
+    return;
+  }
+
+  // Build key combination string
+  let keyCombo = "";
+  if (e.ctrlKey || e.metaKey) keyCombo += "ctrl+";
+  if (e.shiftKey) keyCombo += "shift+";
+  if (e.altKey) keyCombo += "alt+";
+
+  // Handle special keys
+  if (e.key === " ") {
+    keyCombo += "space";
+  } else if (e.key === "Escape") {
+    keyCombo += "escape";
+  } else if (e.key === "Enter") {
+    keyCombo += "enter";
+  } else if (e.key === "Delete" || e.key === "Backspace") {
+    keyCombo += "delete";
+  } else if (e.key.startsWith("F") && e.key.length <= 3) {
+    keyCombo += e.key.toLowerCase();
+  } else if (e.key === ",") {
+    keyCombo += ",";
+  } else if (e.key === "/") {
+    keyCombo += "/";
+  } else if (/^[1-9]$/.test(e.key)) {
+    keyCombo += e.key;
+  } else if (/^[a-z]$/.test(e.key)) {
+    keyCombo += e.key.toLowerCase();
+  } else {
+    return; // Ignore other keys
+  }
+
+  // Check if this key combination is bound
+  if (keybinds[keyCombo]) {
+    e.preventDefault();
+    handleKeybind(keybinds[keyCombo]);
+  }
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("addWorkspaceBtn")
@@ -1086,6 +2009,41 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("closeAllTabsBtn")
     .addEventListener("click", closeAllTabs);
+
+  // Settings event listeners
+  document
+    .getElementById("settingsBtn")
+    .addEventListener("click", showSettings);
+  document
+    .getElementById("closeSettingsBtn")
+    .addEventListener("click", hideSettings);
+  document
+    .getElementById("customBackgroundInput")
+    .addEventListener("change", handleCustomBackgroundUpload);
+
+  // Background selection
+  document.querySelectorAll(".background-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      handleBackgroundSelection(item.dataset.bg);
+    });
+  });
+
+  // Background control sliders
+  const grainOpacitySlider = document.getElementById("grainOpacitySlider");
+  const backgroundBlurSlider = document.getElementById("backgroundBlurSlider");
+
+  if (grainOpacitySlider) {
+    grainOpacitySlider.addEventListener("input", handleGrainOpacityChange);
+  }
+
+  if (backgroundBlurSlider) {
+    backgroundBlurSlider.addEventListener("input", handleBackgroundBlurChange);
+  }
+
+  // Close modal when clicking backdrop
+  document
+    .querySelector(".settings-backdrop")
+    .addEventListener("click", hideSettings);
 
   // Initially hide the "New Category" button
   document.getElementById("addResourceCategory").style.display = "none";
