@@ -2,8 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Tab Manager</title>
+    <title>YATM - Tab Manager</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <img src="../assets/gradient.jpg" alt="gradient" class="gradient" />
@@ -11,8 +17,8 @@
 
     <div id="sidebar">
       <div class="title">
-        <i class="ri-window-2-fill"></i>
-        <h1>Tab Manager</h1>
+        <i class="ri-window-fill"></i>
+        <h1>YATM</h1>
       </div>
       <h2 class="sub-title">Workspaces</h2>
       <div class="workspace-list-container">
@@ -29,7 +35,17 @@
     </div>
 
     <div id="main">
-      <h2 id="workspaceTitle">Select a workspace</h2>
+      <div class="main-header">
+        <div class="search-container">
+          <button id="searchBtn" class="search-button">
+            <i class="ri-search-line"></i>
+            <span>Search tabs and resources...</span>
+          </button>
+        </div>
+        <div class="workspace-path">
+          <h2 id="workspaceTitle">Select a workspace</h2>
+        </div>
+      </div>
       <div class="links">
         <div class="opened">
           <div class="section-header">
@@ -40,6 +56,10 @@
             </button>
           </div>
           <ul id="tabList"></ul>
+          <div id="deleteZone" class="delete-zone">
+            <i class="ri-delete-bin-line"></i>
+            <span>Drop here to delete</span>
+          </div>
         </div>
         <div class="resources-section">
           <div class="section-header">
@@ -278,6 +298,28 @@
               </div>
             </div>
           </div>
+          <div class="settings-section">
+            <h3><i class="ri-database-2-line"></i> Data Management</h3>
+            <div class="backup-controls">
+              <div class="backup-actions">
+                <button id="exportDataBtn" class="backup-btn export-btn">
+                  <i class="ri-download-line"></i>
+                  Export Data
+                </button>
+                <button id="importDataBtn" class="backup-btn import-btn">
+                  <i class="ri-upload-line"></i>
+                  Import Data
+                </button>
+              </div>
+              <div class="backup-info">
+                <p>
+                  <i class="ri-information-line"></i> Export your workspaces,
+                  folders, and settings to prevent data loss. Import to restore
+                  from a backup file.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -286,7 +328,7 @@
       <div class="attribution-text">
         Made with <i class="ri-heart-fill"></i> by
         <a
-          href="https://github.com/TLacault"
+          href="https://github.com/TLacault/tab-manager"
           target="_blank"
           rel="noopener noreferrer"
           >Tim Lacault</a

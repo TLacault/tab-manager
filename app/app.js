@@ -4,6 +4,18 @@ let currentId = null;
 let currentBackground = "gradient.jpg";
 let selectedTabIndex = -1;
 let recentTabs = []; // Track last 10 tabs visited across all workspaces
+
+// Drag and drop state
+let dragState = {
+  isDragging: false,
+  draggedElement: null,
+  draggedData: null,
+  dragType: null, // 'tab' or 'resource'
+  sourceIndex: -1,
+  sourceCategory: null,
+  floatingCopy: null,
+  mouseOffset: { x: 0, y: 0 },
+};
 let keybinds = {
   // Workspace Management
   "ctrl+1": "switchWorkspace1",
@@ -158,6 +170,95 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 
 function saveData() {
   chrome.storage.local.set({ workspaces, folders, recentTabs });
+}
+
+// Backup and restore functionality
+function exportData() {
+  const dataToExport = {
+    workspaces,
+    folders,
+    recentTabs,
+    currentBackground,
+    grainOpacity: document.querySelector("#grainOpacitySlider")?.value || 10,
+    backgroundBlur: document.querySelector("#backgroundBlurSlider")?.value || 0,
+    exportDate: new Date().toISOString(),
+    version: "1.1",
+  };
+
+  const dataStr = JSON.stringify(dataToExport, null, 2);
+  const dataBlob = new Blob([dataStr], { type: "application/json" });
+  const url = URL.createObjectURL(dataBlob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `YATM-backup-${new Date().toISOString().split("T")[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+
+        // Validate the imported data structure
+        if (!importedData.workspaces || !importedData.folders) {
+          alert("Invalid backup file format");
+          return;
+        }
+
+        // Ask for confirmation
+        if (confirm("This will replace all current data. Are you sure?")) {
+          workspaces = importedData.workspaces || {};
+          folders = importedData.folders || {};
+          recentTabs = importedData.recentTabs || [];
+
+          // Restore settings if available
+          if (importedData.currentBackground) {
+            currentBackground = importedData.currentBackground;
+            loadBackground(currentBackground);
+          }
+
+          if (importedData.grainOpacity) {
+            const grainSlider = document.querySelector("#grainOpacitySlider");
+            if (grainSlider) {
+              grainSlider.value = importedData.grainOpacity;
+              grainSlider.nextElementSibling.textContent = `${importedData.grainOpacity}%`;
+            }
+          }
+
+          if (importedData.backgroundBlur) {
+            const blurSlider = document.querySelector("#backgroundBlurSlider");
+            if (blurSlider) {
+              blurSlider.value = importedData.backgroundBlur;
+              blurSlider.nextElementSibling.textContent = `${importedData.backgroundBlur}px`;
+            }
+          }
+
+          saveData();
+          renderWorkspaceList();
+          renderWorkspaceTabs();
+          updateSectionButtons();
+
+          alert("Data imported successfully!");
+        }
+      } catch (error) {
+        alert("Error importing data: " + error.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 function addToRecentTabs(tab, workspaceId) {
@@ -1612,6 +1713,22 @@ function showQuickSearch() {
     let hasResults = false;
     const recentUrls = recentTabs.map((tab) => tab.url);
     const foundTabs = new Map(); // Use Map to deduplicate by URL
+    const foundWorkspaces = new Map(); // Use Map to store workspace results
+
+    // First, search for workspace names themselves
+    Object.keys(workspaces).forEach((workspaceId) => {
+      const ws = workspaces[workspaceId];
+      const workspaceName = getWorkspaceName(workspaceId);
+
+      // Check if workspace name matches query
+      if (workspaceName.toLowerCase().includes(query)) {
+        foundWorkspaces.set(workspaceId, {
+          workspaceId,
+          workspaceName,
+          isCurrent: workspaceId === currentId,
+        });
+      }
+    });
 
     // Search all workspaces
     Object.keys(workspaces).forEach((workspaceId) => {
@@ -1729,11 +1846,41 @@ function showQuickSearch() {
       }
     });
 
+    // Display workspace results first
+    foundWorkspaces.forEach((workspace) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item workspace-result";
+
+      const pins = [];
+      if (workspace.isCurrent) {
+        pins.push(
+          '<span class="pin current-workspace-pin"><i class="ri-check-line"></i>Current</span>'
+        );
+      }
+
+      const pinsHtml = pins.join("");
+
+      resultItem.innerHTML = `
+        <i class="ri-window-2-fill"></i>
+        <span class="result-title">${workspace.workspaceName}</span>
+        <div class="result-pins">${pinsHtml}</div>
+      `;
+
+      resultItem.onclick = () => {
+        if (workspace.workspaceId !== currentId) {
+          loadWorkspace(workspace.workspaceId);
+        }
+        searchOverlay.remove();
+      };
+      results.appendChild(resultItem);
+      hasResults = true;
+    });
+
     // Display deduplicated results
     foundTabs.forEach((item) => {
       const resultItem = document.createElement("div");
       resultItem.className = "search-result-item";
-      const icon = item.isResource ? "ri-bookmark-line" : "ri-window-line";
+      const icon = item.isResource ? "ri-bookmark-line" : "ri-global-line";
 
       // Create pins with icons
       const pins = [];
@@ -1842,7 +1989,7 @@ function showRecentItems(results) {
 
       const pinsHtml = pins.join("");
 
-      resultItem.innerHTML = `<i class="ri-window-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.innerHTML = `<i class="ri-global-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
       resultItem.onclick = () => {
         openOrActivateTab(tab.url);
         document.querySelector(".quick-search-overlay").remove();
@@ -1947,6 +2094,613 @@ function handleBackgroundBlurChange(event) {
   chrome.storage.local.set({ backgroundBlur: value });
 }
 
+// Drag and Drop Functions
+function initializeDragAndDrop() {
+  // Add event listeners for drag start on tab and resource elements
+  document.addEventListener("mousedown", handleDragStart);
+  document.addEventListener("mousemove", handleDragMove);
+  document.addEventListener("mouseup", handleDragEnd);
+  document.addEventListener("dragstart", (e) => e.preventDefault()); // Prevent default drag behavior
+}
+
+function handleDragStart(e) {
+  // Check if clicking on a draggable element
+  const tabElement = e.target.closest("#tabList li");
+  const resourceElement = e.target.closest(".category-resources li");
+
+  if (!tabElement && !resourceElement) return;
+  if (e.target.closest("button")) return; // Don't start drag on buttons
+
+  const element = tabElement || resourceElement;
+  const isTab = !!tabElement;
+
+  // Start drag after 0.1 second delay
+  const dragTimer = setTimeout(() => {
+    startDrag(e, element, isTab);
+  }, 100);
+
+  // Cancel drag if mouse is released before delay
+  const handleMouseUp = () => {
+    clearTimeout(dragTimer);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  document.addEventListener("mouseup", handleMouseUp, { once: true });
+}
+
+function startDrag(e, element, isTab) {
+  if (dragState.isDragging) return;
+
+  dragState.isDragging = true;
+  dragState.draggedElement = element;
+  dragState.dragType = isTab ? "tab" : "resource";
+
+  // Reset mouse offset since we're positioning at cursor
+  dragState.mouseOffset = { x: 0, y: 0 };
+
+  // Store dragged data
+  if (isTab) {
+    const index = Array.from(element.parentNode.children).indexOf(element);
+    dragState.sourceIndex = index;
+    dragState.draggedData = workspaces[currentId]?.tabs?.[index];
+  } else {
+    const categoryElement = element.closest(".resource-category");
+    const categoryName = categoryElement?.querySelector("h4")?.textContent;
+    const resourceIndex = Array.from(element.parentNode.children).indexOf(
+      element
+    );
+    dragState.sourceCategory = categoryName;
+    dragState.sourceIndex = resourceIndex;
+    dragState.draggedData =
+      workspaces[currentId]?.resourceCategories?.[categoryName]?.[
+        resourceIndex
+      ];
+  }
+
+  // Add dragging class to original element (stays in place with visual modification)
+  element.classList.add("dragging");
+
+  // Add visual feedback to drop zones
+  addDropZoneFeedback();
+
+  // Make element follow cursor
+  updateDraggedElementPosition(e);
+}
+
+function handleDragMove(e) {
+  if (!dragState.isDragging) return;
+
+  updateDraggedElementPosition(e);
+  updateDropZones(e);
+}
+
+function updateDraggedElementPosition(e) {
+  if (!dragState.draggedElement) return;
+
+  // Create floating copy if it doesn't exist
+  if (!dragState.floatingCopy) {
+    // Create a simplified floating tab with only logo and domain
+    dragState.floatingCopy = createSimplifiedFloatingTab();
+    dragState.floatingCopy.classList.add("floating-drag-copy");
+
+    document.body.appendChild(dragState.floatingCopy);
+
+    // Position the floating copy at the cursor position (top-left corner)
+    dragState.floatingCopy.style.position = "fixed";
+    dragState.floatingCopy.style.left = `${e.clientX}px`;
+    dragState.floatingCopy.style.top = `${e.clientY}px`;
+    dragState.floatingCopy.style.zIndex = "10000";
+    dragState.floatingCopy.style.pointerEvents = "none";
+  } else {
+    // Update position to follow cursor (top-left corner at cursor)
+    dragState.floatingCopy.style.left = `${e.clientX}px`;
+    dragState.floatingCopy.style.top = `${e.clientY}px`;
+  }
+}
+
+function createSimplifiedFloatingTab() {
+  const tab = dragState.draggedData;
+  const container = document.createElement("div");
+  container.className = "floating-tab-simplified";
+
+  // Create logo element
+  const logo = document.createElement("div");
+  logo.className = "floating-tab-logo";
+
+  if (tab.favicon && tab.favicon !== "chrome://favicon/") {
+    const img = document.createElement("img");
+    img.src = tab.favicon;
+    img.alt = "";
+    logo.appendChild(img);
+  } else {
+    const icon = document.createElement("i");
+    icon.className = "ri-global-line";
+    logo.appendChild(icon);
+  }
+
+  // Create domain element
+  const domain = document.createElement("div");
+  domain.className = "floating-tab-domain";
+  domain.textContent = new URL(tab.url).hostname;
+
+  container.appendChild(logo);
+  container.appendChild(domain);
+
+  return container;
+}
+
+function updateDropZones(e) {
+  // Only remove hover highlights, keep base zone styling
+  document
+    .querySelectorAll(".drop-zone-hover, .drop-zone-invalid")
+    .forEach((el) => {
+      el.classList.remove("drop-zone-hover", "drop-zone-invalid");
+    });
+
+  const tabList = document.getElementById("tabList");
+  const resourceCategories = document.querySelectorAll(".resource-category");
+  const deleteZone = document.getElementById("deleteZone");
+
+  let currentDropZone = null;
+
+  // Check tab list first
+  if (tabList) {
+    const rect = tabList.getBoundingClientRect();
+    if (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    ) {
+      currentDropZone = { element: tabList, type: "tabList" };
+    }
+  }
+
+  // Check resource categories
+  if (!currentDropZone) {
+    for (const category of resourceCategories) {
+      const rect = category.getBoundingClientRect();
+      if (
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom
+      ) {
+        currentDropZone = { element: category, type: "category" };
+        break;
+      }
+    }
+  }
+
+  // Check delete zone
+  if (!currentDropZone && deleteZone) {
+    const rect = deleteZone.getBoundingClientRect();
+    if (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    ) {
+      currentDropZone = { element: deleteZone, type: "delete" };
+    }
+  }
+
+  // Apply appropriate highlight to current drop zone
+  if (currentDropZone) {
+    highlightDropZone(currentDropZone);
+  }
+}
+
+function handleDragEnd(e) {
+  if (!dragState.isDragging) return;
+
+  const dropTarget = getDropTarget(e);
+  const success = performDrop(dropTarget);
+
+  cleanupDrag();
+
+  if (success) {
+    // Save data and re-render
+    saveData();
+    renderWorkspaceTabs();
+  }
+}
+
+function getDropTarget(e) {
+  const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+
+  // Check if dropping on tab list
+  const tabList = elementBelow?.closest("#tabList");
+  if (tabList && isValidDropZone("tabList")) {
+    return { type: "tabList", element: tabList };
+  }
+
+  // Check if dropping on resource category
+  const category = elementBelow?.closest(".resource-category");
+  if (category && isValidDropZone("category")) {
+    const categoryName = category.querySelector("h4")?.textContent;
+    return { type: "category", category: categoryName, element: category };
+  }
+
+  // Check if dropping on delete zone
+  const deleteZone = elementBelow?.closest("#deleteZone");
+  if (deleteZone) {
+    return { type: "delete", element: deleteZone };
+  }
+
+  return null;
+}
+
+function performDrop(dropTarget) {
+  if (!dropTarget || !dragState.draggedData) return false;
+
+  const ws = workspaces[currentId];
+  if (!ws) return false;
+
+  if (dropTarget.type === "delete") {
+    return deleteDraggedItem();
+  } else if (dragState.dragType === "tab" && dropTarget.type === "tabList") {
+    return false; // Can't drop tab on tab list (already there)
+  } else if (
+    dragState.dragType === "resource" &&
+    dropTarget.type === "tabList"
+  ) {
+    return openResourceAsTab(); // Open resource as new tab
+  } else if (dragState.dragType === "tab" && dropTarget.type === "category") {
+    return moveTabToResource(dropTarget.category);
+  } else if (
+    dragState.dragType === "resource" &&
+    dropTarget.type === "category"
+  ) {
+    return moveResourceToCategory(dropTarget.category);
+  }
+
+  return false;
+}
+
+function deleteDraggedItem() {
+  const ws = workspaces[currentId];
+  if (!ws) return false;
+
+  if (dragState.dragType === "tab") {
+    // Close the tab
+    const tab = dragState.draggedData;
+    closeTabByUrl(tab.url);
+    ws.tabs.splice(dragState.sourceIndex, 1);
+    return true;
+  } else if (dragState.dragType === "resource") {
+    // Remove from resource category
+    ws.resourceCategories[dragState.sourceCategory].splice(
+      dragState.sourceIndex,
+      1
+    );
+    return true;
+  }
+
+  return false;
+}
+
+function moveResourceToCategory(targetCategory) {
+  const ws = workspaces[currentId];
+  if (
+    !ws.resourceCategories ||
+    !dragState.sourceCategory ||
+    dragState.sourceIndex === -1
+  )
+    return false;
+
+  const resource = ws.resourceCategories[dragState.sourceCategory].splice(
+    dragState.sourceIndex,
+    1
+  )[0];
+
+  if (!ws.resourceCategories[targetCategory]) {
+    ws.resourceCategories[targetCategory] = [];
+  }
+  ws.resourceCategories[targetCategory].push(resource);
+  return true;
+}
+
+function moveTabToTab(targetIndex) {
+  const ws = workspaces[currentId];
+  if (!ws.tabs || dragState.sourceIndex === -1) return false;
+
+  const tab = ws.tabs.splice(dragState.sourceIndex, 1)[0];
+  ws.tabs.splice(targetIndex, 0, tab);
+  return true;
+}
+
+function moveResourceToResource(targetCategory, targetIndex) {
+  const ws = workspaces[currentId];
+  if (
+    !ws.resourceCategories ||
+    !dragState.sourceCategory ||
+    dragState.sourceIndex === -1
+  )
+    return false;
+
+  const resource = ws.resourceCategories[dragState.sourceCategory].splice(
+    dragState.sourceIndex,
+    1
+  )[0];
+
+  if (!ws.resourceCategories[targetCategory]) {
+    ws.resourceCategories[targetCategory] = [];
+  }
+
+  ws.resourceCategories[targetCategory].splice(targetIndex, 0, resource);
+  return true;
+}
+
+function moveTabToResource(targetCategory) {
+  const ws = workspaces[currentId];
+  if (!ws.tabs || dragState.sourceIndex === -1) return false;
+
+  const tab = ws.tabs[dragState.sourceIndex];
+
+  // Check if tab already exists in target category
+  if (ws.resourceCategories[targetCategory]?.some((r) => r.url === tab.url)) {
+    return false; // Already exists
+  }
+
+  // Remove from tabs
+  ws.tabs.splice(dragState.sourceIndex, 1);
+
+  // Add to resource category
+  if (!ws.resourceCategories[targetCategory]) {
+    ws.resourceCategories[targetCategory] = [];
+  }
+  ws.resourceCategories[targetCategory].push(tab);
+
+  return true;
+}
+
+function openResourceAsTab() {
+  const ws = workspaces[currentId];
+  if (
+    !ws.resourceCategories ||
+    !dragState.sourceCategory ||
+    dragState.sourceIndex === -1
+  )
+    return false;
+
+  const resource =
+    ws.resourceCategories[dragState.sourceCategory][dragState.sourceIndex];
+
+  // Check if tab is already open
+  if (ws.tabs?.some((t) => t.url === resource.url)) {
+    return false; // Already open
+  }
+
+  // Open the resource as a new tab (don't remove from resource category)
+  openOrActivateTab(resource.url);
+
+  return true;
+}
+
+function moveResourceToTab(targetIndex) {
+  const ws = workspaces[currentId];
+  if (
+    !ws.resourceCategories ||
+    !dragState.sourceCategory ||
+    dragState.sourceIndex === -1
+  )
+    return false;
+
+  const resource =
+    ws.resourceCategories[dragState.sourceCategory][dragState.sourceIndex];
+
+  // Check if tab is already open
+  if (ws.tabs?.some((t) => t.url === resource.url)) {
+    return false; // Already open
+  }
+
+  // Remove from resources
+  ws.resourceCategories[dragState.sourceCategory].splice(
+    dragState.sourceIndex,
+    1
+  );
+
+  // Add to tabs
+  if (!ws.tabs) ws.tabs = [];
+  ws.tabs.splice(targetIndex, 0, resource);
+
+  return true;
+}
+
+function addDropZoneFeedback() {
+  // Add visual feedback to tab list
+  const tabList = document.getElementById("tabList");
+  if (tabList) {
+    tabList.classList.add("drop-zone-active");
+    if (dragState.dragType === "tab") {
+      // For tabs, always show blue (less bright if already there)
+      const tab = dragState.draggedData;
+      const isAlreadyThere = workspaces[currentId]?.tabs?.some(
+        (t) => t.url === tab.url
+      );
+      if (isAlreadyThere) {
+        tabList.classList.add("tab-zone-dim");
+      } else {
+        tabList.classList.add("tab-zone");
+      }
+    } else if (dragState.dragType === "resource") {
+      // For resources, always show blue (less bright if already open)
+      const resource = dragState.draggedData;
+      const isAlreadyOpen = workspaces[currentId]?.tabs?.some(
+        (t) => t.url === resource.url
+      );
+      if (isAlreadyOpen) {
+        tabList.classList.add("tab-zone-dim");
+      } else {
+        tabList.classList.add("tab-zone");
+      }
+    } else if (isValidDropZone("tabList")) {
+      tabList.classList.add("tab-zone");
+    } else {
+      tabList.classList.add("tab-zone-dim");
+    }
+  }
+
+  // Add visual feedback to resource categories
+  const resourceCategories = document.querySelectorAll(".resource-category");
+  resourceCategories.forEach((category) => {
+    category.classList.add("drop-zone-active");
+
+    if (dragState.dragType === "resource") {
+      // For resource to resource, check if already in this specific category
+      const categoryName = category.querySelector("h4")?.textContent;
+      const resource = dragState.draggedData;
+      const isAlreadyInCategory = workspaces[currentId]?.resourceCategories?.[
+        categoryName
+      ]?.some((r) => r.url === resource.url);
+      if (isAlreadyInCategory) {
+        category.classList.add("resource-zone-dim");
+      } else {
+        category.classList.add("resource-zone");
+      }
+    } else if (dragState.dragType === "tab") {
+      // For tab to category, check if tab is already in this specific category
+      const categoryName = category.querySelector("h4")?.textContent;
+      const tab = dragState.draggedData;
+      const isAlreadyInCategory = workspaces[currentId]?.resourceCategories?.[
+        categoryName
+      ]?.some((r) => r.url === tab.url);
+      if (isAlreadyInCategory) {
+        category.classList.add("resource-zone-dim");
+      } else {
+        category.classList.add("resource-zone");
+      }
+    } else if (isValidDropZone("category")) {
+      category.classList.add("resource-zone");
+    } else {
+      category.classList.add("resource-zone-dim");
+    }
+  });
+
+  // Show and add visual feedback to delete zone
+  const deleteZone = document.getElementById("deleteZone");
+  if (deleteZone) {
+    deleteZone.style.display = "flex";
+    deleteZone.classList.add("drop-zone-active");
+    deleteZone.classList.add("delete-zone");
+  }
+}
+
+function removeDropZoneFeedback() {
+  // Remove visual feedback from tab list
+  const tabList = document.getElementById("tabList");
+  if (tabList) {
+    tabList.classList.remove("drop-zone-active", "tab-zone", "tab-zone-dim");
+  }
+
+  // Remove visual feedback from resource categories
+  const resourceCategories = document.querySelectorAll(".resource-category");
+  resourceCategories.forEach((category) => {
+    category.classList.remove(
+      "drop-zone-active",
+      "resource-zone",
+      "resource-zone-dim"
+    );
+  });
+
+  // Hide and remove visual feedback from delete zone
+  const deleteZone = document.getElementById("deleteZone");
+  if (deleteZone) {
+    deleteZone.style.display = "none";
+    deleteZone.classList.remove("drop-zone-active", "delete-zone");
+  }
+}
+
+function removeAllDropZoneHighlights() {
+  // Remove all highlight classes
+  document.querySelectorAll(".drop-zone-active").forEach((el) => {
+    el.classList.remove(
+      "drop-zone-active",
+      "drop-zone-hover",
+      "drop-zone-invalid",
+      "tab-zone",
+      "tab-zone-dim",
+      "resource-zone",
+      "resource-zone-dim",
+      "delete-zone"
+    );
+  });
+}
+
+function highlightDropZone(dropZone) {
+  const { element, type } = dropZone;
+
+  // Check if this is a valid drop zone for the current drag
+  const isValid = isValidDropZone(type);
+
+  if (isValid) {
+    element.classList.add("drop-zone-hover");
+  } else {
+    element.classList.add("drop-zone-invalid");
+  }
+}
+
+function isValidDropZone(zoneType) {
+  const dragType = dragState.dragType;
+
+  if (zoneType === "delete") {
+    return true; // Always valid for delete
+  }
+
+  if (zoneType === "tabList") {
+    if (dragType === "tab") {
+      // Tab list should always show as valid (blue) for tabs, even if already there
+      return true;
+    }
+    if (dragType === "resource") {
+      // Resource to tab list should always show as valid (blue), even if already open
+      return true;
+    }
+  }
+
+  if (zoneType === "category") {
+    if (dragType === "tab") {
+      // For tabs, we'll handle the "already in category" case in addDropZoneFeedback
+      return true;
+    }
+    if (dragType === "resource") {
+      // Resources can move between categories, but not to the same category
+      return true; // We'll handle the "already in category" case in addDropZoneFeedback
+    }
+  }
+
+  return true;
+}
+
+function getCategoryNameFromElement(element) {
+  const categoryElement = element.closest(".resource-category");
+  return categoryElement?.querySelector("h4")?.textContent;
+}
+
+function cleanupDrag() {
+  if (dragState.draggedElement) {
+    dragState.draggedElement.classList.remove("dragging");
+  }
+
+  if (dragState.floatingCopy) {
+    dragState.floatingCopy.remove();
+  }
+
+  // Remove drop zone feedback
+  removeDropZoneFeedback();
+
+  // Reset drag state
+  dragState.isDragging = false;
+  dragState.draggedElement = null;
+  dragState.draggedData = null;
+  dragState.dragType = null;
+  dragState.sourceIndex = -1;
+  dragState.sourceCategory = null;
+  dragState.floatingCopy = null;
+  dragState.mouseOffset = { x: 0, y: 0 };
+}
+
 // Keyboard event listener
 document.addEventListener("keydown", (e) => {
   // Don't trigger keybinds when typing in inputs or when modals are open
@@ -2003,6 +2757,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("addFolderBtn").addEventListener("click", addFolder);
 
   document
+    .getElementById("searchBtn")
+    .addEventListener("click", showQuickSearch);
+
+  document
     .getElementById("addResourceCategory")
     .addEventListener("click", addResourceCategory);
 
@@ -2050,4 +2808,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initially hide the "Close All Tabs" button
   document.getElementById("closeAllTabsBtn").style.display = "none";
+
+  // Initialize drag and drop
+  initializeDragAndDrop();
+
+  // Backup functionality
+  document
+    .getElementById("exportDataBtn")
+    .addEventListener("click", exportData);
+  document
+    .getElementById("importDataBtn")
+    .addEventListener("click", importData);
 });
