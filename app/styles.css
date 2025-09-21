@@ -1697,6 +1697,7 @@ button i {
 
 /* Backup Controls */
 .backup-controls {
+  margin-top: -20px;
   padding: 20px 0;
 }
 
@@ -1743,6 +1744,9 @@ button i {
 }
 
 .backup-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -1752,7 +1756,7 @@ button i {
 
 .backup-info p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
   line-height: 1.5;
   display: flex;
@@ -1761,7 +1765,8 @@ button i {
 }
 
 .backup-info i {
-  color: rgba(33, 150, 243, 0.8);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
   margin-top: 2px;
   flex-shrink: 0;
 }
