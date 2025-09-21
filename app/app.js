@@ -61,12 +61,14 @@ chrome.storage.local.get(
     "grainOpacity",
     "backgroundBlur",
     "recentTabs",
+    "favoriteTabs",
   ],
   (data) => {
     workspaces = data.workspaces || {};
     folders = data.folders || {};
     currentBackground = data.currentBackground || "gradient.jpg";
     recentTabs = data.recentTabs || [];
+    favoriteTabs = data.favoriteTabs || [];
 
     // Load the saved background
     loadBackground(currentBackground);
@@ -281,9 +283,90 @@ function addToRecentTabs(tab, workspaceId) {
   chrome.storage.local.set({ recentTabs });
 }
 
+// Favorite tabs management
+let favoriteTabs = [];
+
+function toggleTabFavorite(tabUrl) {
+  const isCurrentlyFavorite = favoriteTabs.some((tab) => tab.url === tabUrl);
+
+  if (isCurrentlyFavorite) {
+    // Remove from favorites
+    favoriteTabs = favoriteTabs.filter((tab) => tab.url !== tabUrl);
+  } else {
+    // Add to favorites
+    const tab = findTabByUrl(tabUrl);
+    if (tab) {
+      // Ensure we have the correct workspace ID
+      const workspaceId = tab.workspaceId || currentId;
+      favoriteTabs.push({
+        ...tab,
+        workspaceId: workspaceId,
+        isFavorite: true,
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  // Update storage
+  chrome.storage.local.set({ favoriteTabs });
+
+  // Update the tab's isFavorite property in the current workspace
+  if (currentId && workspaces[currentId]) {
+    const ws = workspaces[currentId];
+    if (ws.tabs) {
+      const tab = ws.tabs.find((t) => t.url === tabUrl);
+      if (tab) {
+        tab.isFavorite = !isCurrentlyFavorite;
+        saveData();
+      }
+    }
+  }
+
+  // Re-render tabs to update heart icons
+  renderWorkspaceTabs();
+}
+
+function findTabByUrl(url) {
+  // Search in current workspace first
+  if (currentId && workspaces[currentId] && workspaces[currentId].tabs) {
+    const tab = workspaces[currentId].tabs.find((t) => t.url === url);
+    if (tab) {
+      return { ...tab, workspaceId: currentId };
+    }
+  }
+
+  // Search in all workspaces
+  for (const workspaceId of Object.keys(workspaces)) {
+    const ws = workspaces[workspaceId];
+    if (ws.tabs) {
+      const tab = ws.tabs.find((t) => t.url === url);
+      if (tab) {
+        return { ...tab, workspaceId: workspaceId };
+      }
+    }
+  }
+
+  return null;
+}
+
 function getWorkspaceName(workspaceId) {
   if (!workspaceId || !workspaces[workspaceId]) return "Unknown";
   return workspaces[workspaceId].name;
+}
+
+function getRecentWorkspaces() {
+  // Get all workspaces except current one, sorted by last access
+  const workspaceList = Object.keys(workspaces)
+    .filter((id) => id !== currentId)
+    .map((id) => ({
+      id,
+      name: workspaces[id].name,
+      lastAccess: workspaces[id].lastAccess || 0,
+    }))
+    .sort((a, b) => b.lastAccess - a.lastAccess)
+    .slice(0, 5); // Show top 5 recent workspaces
+
+  return workspaceList;
 }
 
 function updateWorkspaceTitle(ws) {
@@ -1010,8 +1093,23 @@ function renderWorkspaceTabs() {
 
       const websiteIcon = createFavicon(tab.url);
 
-      // Reorganize layout: close - tab name - settings
-      li.append(closeBtn, websiteIcon, link, settingsBtn);
+      // Create heart icon for favorites
+      const isCurrentlyFavorite = favoriteTabs.some(
+        (favTab) => favTab.url === tab.url
+      );
+      const heartBtn = createIconButton(
+        isCurrentlyFavorite ? "heart-fill" : "heart-line",
+        () => {
+          toggleTabFavorite(tab.url);
+        }
+      );
+      heartBtn.className = "favorite-btn";
+      heartBtn.style.color = isCurrentlyFavorite
+        ? "#ff6b6b"
+        : "rgba(255, 255, 255, 0.5)";
+
+      // Reorganize layout: close - favicon - name - heart - settings
+      li.append(closeBtn, websiteIcon, link, heartBtn, settingsBtn);
       tabList.appendChild(li);
     });
   }
@@ -1508,6 +1606,15 @@ function showSettings() {
     }
   });
 
+  // Add escape key listener to close settings
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      hideSettings();
+      document.removeEventListener("keydown", handleEscape);
+    }
+  };
+  document.addEventListener("keydown", handleEscape);
+
   // Load current slider values
   chrome.storage.local.get(["grainOpacity", "backgroundBlur"], (data) => {
     const grainOpacity = data.grainOpacity || 10;
@@ -1685,6 +1792,20 @@ function showQuickSearch() {
         <i class="ri-search-line"></i>
         <input type="text" placeholder="Search tabs and resources..." class="quick-search-input" autofocus>
       </div>
+      <div class="search-tabs">
+        <button class="search-tab active" data-tab="favorites">
+          <i class="ri-heart-fill"></i>
+          Favorites
+        </button>
+        <button class="search-tab" data-tab="recent">
+          <i class="ri-time-line"></i>
+          Recent
+        </button>
+        <button class="search-tab" data-tab="workspaces">
+          <i class="ri-window-2-fill"></i>
+          Workspaces
+        </button>
+      </div>
       <div class="quick-search-results"></div>
     </div>
   `;
@@ -1693,19 +1814,63 @@ function showQuickSearch() {
 
   const input = searchOverlay.querySelector(".quick-search-input");
   const results = searchOverlay.querySelector(".quick-search-results");
+  const searchTabs = searchOverlay.querySelectorAll(".search-tab");
+
+  let currentTab = "favorites";
 
   // Focus the input immediately
   setTimeout(() => {
     input.focus();
   }, 0);
 
+  // Tab navigation handlers
+  searchTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      // Update active tab
+      searchTabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentTab = tab.dataset.tab;
+
+      // Update results based on current tab
+      updateSearchResults();
+    });
+  });
+
+  // Function to update search results based on current tab
+  const updateSearchResults = () => {
+    if (input.value.trim().length > 0) {
+      // If there's a search query, show search results
+      return;
+    }
+
+    // Show content based on selected tab
+    results.innerHTML = "";
+    selectedIndex = -1;
+
+    switch (currentTab) {
+      case "favorites":
+        showFavoritesOnly(results, searchResults);
+        break;
+      case "recent":
+        showRecentTabsOnly(results, searchResults);
+        break;
+      case "workspaces":
+        showRecentWorkspacesOnly(results, searchResults);
+        break;
+    }
+
+    // Re-add event handlers after updating results
+    setTimeout(addWorkspacePinHandlers, 0);
+  };
+
   input.addEventListener("input", (e) => {
     const query = e.target.value.toLowerCase();
     results.innerHTML = "";
+    selectedIndex = -1; // Reset selection
 
     if (query.length < 1) {
-      // Show recent items when no query
-      showRecentItems(results);
+      // Show content based on current tab when no query
+      updateSearchResults();
       return;
     }
 
@@ -1854,7 +2019,7 @@ function showQuickSearch() {
       const pins = [];
       if (workspace.isCurrent) {
         pins.push(
-          '<span class="pin current-workspace-pin"><i class="ri-check-line"></i>Current</span>'
+          '<span class="pin current-workspace-pin"><i class="ri-check-fill"></i>Current</span>'
         );
       }
 
@@ -1921,16 +2086,142 @@ function showQuickSearch() {
 
     // Add workspace pin handlers for search results
     setTimeout(addWorkspacePinHandlers, 0);
+
+    // Update search results array for keyboard navigation
+    updateSearchResultsArray();
   });
+
+  // Keyboard navigation state
+  let selectedIndex = -1;
+  let searchResults = [];
+
+  const updateSelectedResult = () => {
+    // Remove previous selection
+    results.querySelectorAll(".search-result-item").forEach((item, index) => {
+      item.classList.remove("selected");
+      if (index === selectedIndex) {
+        item.classList.add("selected");
+        item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  };
+
+  const selectResult = (index) => {
+    if (index >= 0 && index < searchResults.length) {
+      selectedIndex = index;
+      updateSelectedResult();
+    }
+  };
+
+  const navigateResults = (direction) => {
+    // Update search results array before navigation
+    searchResults = Array.from(results.querySelectorAll(".search-result-item"));
+
+    if (searchResults.length === 0) return;
+
+    if (direction === "up") {
+      selectedIndex =
+        selectedIndex <= 0 ? searchResults.length - 1 : selectedIndex - 1;
+    } else if (direction === "down") {
+      selectedIndex =
+        selectedIndex >= searchResults.length - 1 ? 0 : selectedIndex + 1;
+    }
+
+    updateSelectedResult();
+  };
+
+  const activateSelectedResult = () => {
+    // Update search results array before activation
+    searchResults = Array.from(results.querySelectorAll(".search-result-item"));
+
+    if (selectedIndex >= 0 && selectedIndex < searchResults.length) {
+      const selectedResult = searchResults[selectedIndex];
+      if (selectedResult) {
+        selectedResult.click();
+      }
+    }
+  };
+
+  // Update search results array when results change
+  const updateSearchResultsArray = () => {
+    searchResults = Array.from(results.querySelectorAll(".search-result-item"));
+  };
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       searchOverlay.remove();
     } else if (e.key === "Enter") {
-      const firstResult = results.querySelector(".search-result-item");
-      if (firstResult) {
-        firstResult.click();
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < searchResults.length) {
+        activateSelectedResult();
+      } else {
+        // Fallback to first result if no selection
+        const firstResult = results.querySelector(".search-result-item");
+        if (firstResult) {
+          firstResult.click();
+        }
       }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      navigateResults("down");
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      navigateResults("up");
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      // Navigate between tabs
+      const currentIndex = Array.from(searchTabs).findIndex((tab) =>
+        tab.classList.contains("active")
+      );
+      let newIndex;
+
+      if (e.shiftKey) {
+        // Shift + Tab: go to previous tab
+        newIndex = currentIndex > 0 ? currentIndex - 1 : searchTabs.length - 1;
+      } else {
+        // Tab: go to next tab
+        newIndex = currentIndex < searchTabs.length - 1 ? currentIndex + 1 : 0;
+      }
+
+      // Update active tab
+      searchTabs.forEach((t) => t.classList.remove("active"));
+      searchTabs[newIndex].classList.add("active");
+      currentTab = searchTabs[newIndex].dataset.tab;
+
+      // Update results
+      updateSearchResults();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      // Navigate to previous tab with left arrow
+      const currentIndex = Array.from(searchTabs).findIndex((tab) =>
+        tab.classList.contains("active")
+      );
+      const newIndex =
+        currentIndex > 0 ? currentIndex - 1 : searchTabs.length - 1;
+
+      // Update active tab
+      searchTabs.forEach((t) => t.classList.remove("active"));
+      searchTabs[newIndex].classList.add("active");
+      currentTab = searchTabs[newIndex].dataset.tab;
+
+      // Update results
+      updateSearchResults();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      // Navigate to next tab with right arrow
+      const currentIndex = Array.from(searchTabs).findIndex((tab) =>
+        tab.classList.contains("active")
+      );
+      const newIndex =
+        currentIndex < searchTabs.length - 1 ? currentIndex + 1 : 0;
+
+      // Update active tab
+      searchTabs.forEach((t) => t.classList.remove("active"));
+      searchTabs[newIndex].classList.add("active");
+      currentTab = searchTabs[newIndex].dataset.tab;
+
+      // Update results
+      updateSearchResults();
     }
   });
 
@@ -1941,10 +2232,10 @@ function showQuickSearch() {
     }
   };
 
-  // Show recent items initially
-  showRecentItems(results);
+  // Show initial content based on current tab
+  updateSearchResults();
 
-  // Add click handlers for workspace pins
+  // Add click handlers for workspace pins and favorite pins
   const addWorkspacePinHandlers = () => {
     const clickablePins = searchOverlay.querySelectorAll(
       ".pin.workspace-pin.clickable"
@@ -1959,16 +2250,84 @@ function showQuickSearch() {
         }
       });
     });
+
+    // Add handlers for favorite pins (remove from favorites)
+    const favoritePins = searchOverlay.querySelectorAll(
+      ".pin.favorite-pin.clickable"
+    );
+    favoritePins.forEach((pin) => {
+      pin.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const tabUrl = pin.dataset.url;
+        if (tabUrl) {
+          toggleTabFavorite(tabUrl);
+          // Re-render the current tab content
+          updateSearchResults();
+        }
+      });
+    });
   };
 
   // Add handlers after initial render
   setTimeout(addWorkspacePinHandlers, 0);
+
+  // Update search results array for keyboard navigation
+  if (typeof updateSearchResultsArray === "function") {
+    updateSearchResultsArray();
+  }
 }
 
 function showRecentItems(results) {
   results.innerHTML = "";
+  selectedIndex = -1; // Reset selection
 
+  let hasItems = false;
+
+  // Show Favorites section
+  if (favoriteTabs.length > 0) {
+    const favoritesHeader = document.createElement("div");
+    favoritesHeader.className = "search-section-header";
+    favoritesHeader.innerHTML = '<i class="ri-heart-fill"></i> Favorites';
+    results.appendChild(favoritesHeader);
+
+    favoriteTabs.forEach((tab) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item favorite-item";
+      const workspaceName = getWorkspaceName(tab.workspaceId);
+
+      // Create pins with icons
+      const pins = [];
+      const isCurrentWorkspace = tab.workspaceId === currentId;
+      const workspacePinClass = isCurrentWorkspace
+        ? "pin workspace-pin current"
+        : "pin workspace-pin clickable";
+      pins.push(
+        `<span class="${workspacePinClass}" data-workspace-id="${tab.workspaceId}"><i class="ri-window-2-line"></i>${workspaceName}</span>`
+      );
+      pins.push(
+        `<span class="pin favorite-pin clickable" data-url="${tab.url}"><i class="ri-heart-fill"></i>Liked</span>`
+      );
+
+      const pinsHtml = pins.join("");
+
+      resultItem.innerHTML = `<i class="ri-global-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.onclick = () => {
+        openOrActivateTab(tab.url);
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+      searchResults.push(resultItem);
+      hasItems = true;
+    });
+  }
+
+  // Show Recent Tabs section
   if (recentTabs.length > 0) {
+    const recentHeader = document.createElement("div");
+    recentHeader.className = "search-section-header";
+    recentHeader.innerHTML = '<i class="ri-time-line"></i> Recent Tabs';
+    results.appendChild(recentHeader);
+
     recentTabs.forEach((tab) => {
       const resultItem = document.createElement("div");
       resultItem.className = "search-result-item recent-item";
@@ -1995,11 +2354,175 @@ function showRecentItems(results) {
         document.querySelector(".quick-search-overlay").remove();
       };
       results.appendChild(resultItem);
+      searchResults.push(resultItem);
+      hasItems = true;
+    });
+  }
+
+  // Show Recent Workspaces section
+  const recentWorkspaces = getRecentWorkspaces();
+  if (recentWorkspaces.length > 0) {
+    const workspacesHeader = document.createElement("div");
+    workspacesHeader.className = "search-section-header";
+    workspacesHeader.innerHTML =
+      '<i class="ri-window-2-fill"></i> Recent Workspaces';
+    results.appendChild(workspacesHeader);
+
+    recentWorkspaces.forEach((workspace) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item workspace-result";
+
+      const pins = [];
+      if (workspace.id === currentId) {
+        pins.push(
+          '<span class="pin current-workspace-pin"><i class="ri-check-fill"></i>Current</span>'
+        );
+      }
+
+      const pinsHtml = pins.join("");
+
+      resultItem.innerHTML = `
+        <i class="ri-window-2-fill"></i>
+        <span class="result-title">${workspace.name}</span>
+        <div class="result-pins">${pinsHtml}</div>
+      `;
+
+      resultItem.onclick = () => {
+        if (workspace.id !== currentId) {
+          loadWorkspace(workspace.id);
+        }
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+      searchResults.push(resultItem);
+      hasItems = true;
+    });
+  }
+
+  if (!hasItems) {
+    const noItems = document.createElement("div");
+    noItems.className = "no-results";
+    noItems.innerHTML = '<i class="ri-inbox-line"></i> No items available';
+    results.appendChild(noItems);
+  }
+}
+
+// Individual tab content functions
+function showFavoritesOnly(results, searchResults) {
+  results.innerHTML = "";
+  selectedIndex = -1;
+
+  if (favoriteTabs.length > 0) {
+    favoriteTabs.forEach((tab) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item favorite-item";
+      const workspaceName = getWorkspaceName(tab.workspaceId);
+
+      const pins = [];
+      const isCurrentWorkspace = tab.workspaceId === currentId;
+      const workspacePinClass = isCurrentWorkspace
+        ? "pin workspace-pin current"
+        : "pin workspace-pin clickable";
+      pins.push(
+        `<span class="${workspacePinClass}" data-workspace-id="${tab.workspaceId}"><i class="ri-window-2-line"></i>${workspaceName}</span>`
+      );
+      pins.push(
+        `<span class="pin favorite-pin clickable" data-url="${tab.url}"><i class="ri-heart-fill"></i>Liked</span>`
+      );
+
+      const pinsHtml = pins.join("");
+      resultItem.innerHTML = `<i class="ri-global-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.onclick = () => {
+        openOrActivateTab(tab.url);
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+      searchResults.push(resultItem);
     });
   } else {
     const noItems = document.createElement("div");
     noItems.className = "no-results";
-    noItems.innerHTML = '<i class="ri-inbox-line"></i> No recent items';
+    noItems.innerHTML = '<i class="ri-heart-line"></i> No favorites yet';
+    results.appendChild(noItems);
+  }
+}
+
+function showRecentTabsOnly(results, searchResults) {
+  results.innerHTML = "";
+  selectedIndex = -1;
+
+  if (recentTabs.length > 0) {
+    recentTabs.forEach((tab) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item recent-item";
+      const workspaceName = getWorkspaceName(tab.workspaceId);
+
+      const pins = [];
+      const isCurrentWorkspace = tab.workspaceId === currentId;
+      const workspacePinClass = isCurrentWorkspace
+        ? "pin workspace-pin current"
+        : "pin workspace-pin clickable";
+      pins.push(
+        `<span class="${workspacePinClass}" data-workspace-id="${tab.workspaceId}"><i class="ri-window-2-line"></i>${workspaceName}</span>`
+      );
+      pins.push(
+        `<span class="pin recent-pin"><i class="ri-time-line"></i>Recent</span>`
+      );
+
+      const pinsHtml = pins.join("");
+      resultItem.innerHTML = `<i class="ri-global-line"></i> <span class="result-title">${tab.title}</span><div class="result-pins">${pinsHtml}</div>`;
+      resultItem.onclick = () => {
+        openOrActivateTab(tab.url);
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+      searchResults.push(resultItem);
+    });
+  } else {
+    const noItems = document.createElement("div");
+    noItems.className = "no-results";
+    noItems.innerHTML = '<i class="ri-time-line"></i> No recent tabs';
+    results.appendChild(noItems);
+  }
+}
+
+function showRecentWorkspacesOnly(results, searchResults) {
+  results.innerHTML = "";
+  selectedIndex = -1;
+
+  const recentWorkspaces = getRecentWorkspaces();
+  if (recentWorkspaces.length > 0) {
+    recentWorkspaces.forEach((workspace) => {
+      const resultItem = document.createElement("div");
+      resultItem.className = "search-result-item workspace-result";
+
+      const pins = [];
+      if (workspace.id === currentId) {
+        pins.push(
+          '<span class="pin current-workspace-pin"><i class="ri-check-fill"></i>Current</span>'
+        );
+      }
+
+      const pinsHtml = pins.join("");
+      resultItem.innerHTML = `
+        <i class="ri-window-2-fill"></i>
+        <span class="result-title">${workspace.name}</span>
+        <div class="result-pins">${pinsHtml}</div>
+      `;
+
+      resultItem.onclick = () => {
+        if (workspace.id !== currentId) {
+          loadWorkspace(workspace.id);
+        }
+        document.querySelector(".quick-search-overlay").remove();
+      };
+      results.appendChild(resultItem);
+      searchResults.push(resultItem);
+    });
+  } else {
+    const noItems = document.createElement("div");
+    noItems.className = "no-results";
+    noItems.innerHTML = '<i class="ri-window-2-line"></i> No other workspaces';
     results.appendChild(noItems);
   }
 }
